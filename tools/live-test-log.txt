@@ -1,0 +1,27 @@
+Controller live test 11/15/2026 19:52:15
+Controller: "Wireless Controller" 054C:09CC over Bluetooth
+
+=== GUIDED BUTTON TEST ===
+Press each button when its name appears, then let go. Hold the controller so nothing else is pressed.
+  Cross           -> controller reported: Cross                  [OK]  raw 28 00 00
+  Circle          -> controller reported: Circle                 [OK]  raw 48 00 00
+  Square          -> controller reported: Square                 [OK]  raw 18 00 00
+  Triangle        -> controller reported: Triangle               [OK]  raw 88 00 00
+  Up              -> controller reported: Up                     [OK]  raw 00 00 00
+  Right           -> controller reported: Right                  [OK]  raw 02 00 00
+  Down            -> controller reported: Down                   [OK]  raw 04 00 00
+  Left            -> controller reported: Left                   [OK]  raw 06 00 00
+  L1              -> controller reported: L1                     [OK]  raw 08 01 00
+  R1              -> controller reported: R1                     [OK]  raw 08 02 00
+  L2              -> controller reported: L2                     [OK]  raw 08 04 00
+  R2              -> controller reported: R2                     [OK]  raw 08 08 00
+  L3              -> controller reported: L3                     [OK]  raw 08 40 00
+  R3              -> controller reported: R3                     [OK]  raw 08 80 00
+  Share           -> controller reported: Share                  [OK]  raw 08 10 00
+  Options         -> controller reported: Options                [OK]  raw 08 20 00
+  PS              -> controller reported: PS                     [OK]  raw 08 00 01
+  Touchpad click  -> controller reported: Touchpad click         [OK]  raw 08 00 02
+
+Every button reported correctly.
+
+Done. You can close this window.

@@ -1,0 +1,1785 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PlayStation Controller Checker</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='1' y='4' width='14' height='8' rx='4' fill='%232f6fde'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --text: #1b1f24; --muted: #5d6673; --border: #dde1e6;
+    --accent: #2f6fde; --ok: #1f8a4c; --bad: #c62f2f; --warn: #b7791f; --code: #eef0f3;
+    --trace: rgba(47,111,222,.35); --dz: rgba(183,121,31,.25);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14171b; --card: #1d2127; --text: #e6e9ed; --muted: #9aa3ae; --border: #2e343c;
+      --accent: #5b8ff0; --ok: #3cbf74; --bad: #ef5d5d; --warn: #e0a53c; --code: #262b32;
+      --trace: rgba(91,143,240,.4); --dz: rgba(224,165,60,.25);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14171b; --card: #1d2127; --text: #e6e9ed; --muted: #9aa3ae; --border: #2e343c;
+    --accent: #5b8ff0; --ok: #3cbf74; --bad: #ef5d5d; --warn: #e0a53c; --code: #262b32;
+    --trace: rgba(91,143,240,.4); --dz: rgba(224,165,60,.25);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-bottom: 16px; }
+  .card h2 { font-size: 1.05rem; margin: 0 0 10px; }
+  .card h3 { font-size: .95rem; margin: 16px 0 6px; }
+  ol { margin: 0; padding-left: 20px; }
+  button { font: inherit; padding: 9px 16px; border-radius: 8px; border: 0; background: var(--accent); color: #fff; cursor: pointer; font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  #verdict { display: none; border-width: 2px; }
+  #verdict .big { font-size: 1.4rem; font-weight: 700; }
+  #verdict.ok { border-color: var(--ok); } #verdict.ok .big { color: var(--ok); }
+  #verdict.bad { border-color: var(--bad); } #verdict.bad .big { color: var(--bad); }
+  #verdict.warn { border-color: var(--warn); } #verdict.warn .big { color: var(--warn); }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { padding: 8px 6px; border-top: 1px solid var(--border); vertical-align: top; text-align: left; }
+  th { font-size: .85em; color: var(--muted); font-weight: 600; }
+  td.s { width: 70px; font-weight: 700; white-space: nowrap; }
+  .PASS { color: var(--ok); } .FAIL { color: var(--bad); } .WARN { color: var(--warn); } .INFO { color: var(--muted); }
+  .detail { color: var(--muted); font-size: .9em; word-break: break-word; }
+  pre { background: var(--code); padding: 10px; border-radius: 8px; max-height: 260px; overflow: auto; font-size: 12px; white-space: pre-wrap; word-break: break-all; margin: 0; }
+  .meter { height: 8px; background: var(--code); border-radius: 4px; overflow: hidden; margin-top: 4px; }
+  .meter > div { height: 100%; width: 0; background: var(--accent); transition: width .08s; }
+  .hidden { display: none !important; }
+  .err { color: var(--bad); font-weight: 600; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+  .tabs button { background: transparent; color: var(--muted); border-radius: 8px 8px 0 0; padding: 8px 12px; font-weight: 600; border-bottom: 2px solid transparent; }
+  .tabs button.on { color: var(--accent); border-bottom-color: var(--accent); }
+  .sticks { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+  .stick { text-align: center; }
+  canvas.pad { width: 200px; height: 200px; max-width: 100%; background: var(--code); border-radius: 50%; }
+  .mono { font-family: ui-monospace, Consolas, monospace; font-size: .9em; }
+  .btngrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+  .btngrid div { border: 1px solid var(--border); border-radius: 8px; padding: 8px 4px; text-align: center; font-size: .85em; font-weight: 600; color: var(--muted); }
+  .btngrid div.seen { border-color: var(--ok); color: var(--ok); }
+  .btngrid div.down { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .trig { display: grid; grid-template-columns: 40px 1fr 60px; gap: 10px; align-items: center; margin: 6px 0; }
+  .trig .meter { height: 14px; margin: 0; }
+  .note { background: var(--code); border-radius: 8px; padding: 10px 12px; margin-top: 12px; font-size: .92em; }
+  .scorehead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  #scoreBig { font-size: 2rem; font-weight: 800; }
+  #scoreGrade { font-weight: 700; color: var(--muted); }
+  .srow { display: grid; grid-template-columns: 150px 1fr 70px; gap: 10px; align-items: center; margin: 6px 0; }
+  .srow .meter { height: 10px; margin: 0; }
+  .srow > span:last-child { text-align: right; }
+  input[type=color] { width: 48px; height: 38px; border: 1px solid var(--border); border-radius: 8px; background: transparent; padding: 2px; }
+  .tablewrap { overflow-x: auto; }
+  .up { color: var(--bad); } .down { color: var(--ok); }
+  #trCanvas { display: block; width: 100%; height: auto; aspect-ratio: 2 / 1; background: var(--code); border-radius: 8px; margin: 10px 0; }
+  .aimctl { gap: 14px; }
+  .aimctl label { display: flex; gap: 6px; align-items: center; font-size: .92em; }
+  .aimctl input[type=range] { width: 110px; }
+  select { font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); }
+  .aimset { margin: 0; padding-left: 18px; }
+  .aimset li { margin: 3px 0; }
+  .gametable input, .gametable select { width: 110px; font: inherit; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); }
+  .gametable td.rec { font-weight: 700; white-space: nowrap; }
+  .gametable td.rec.changed { color: var(--accent); }
+  .gametable td.why { color: var(--muted); font-size: .88em; }
+  .print-only { display: none; }
+  @media (max-width: 520px) { .srow { grid-template-columns: 110px 1fr 60px; } }
+  @media print {
+    :root, :root[data-theme="dark"], :root:not([data-theme="light"]) {
+      --bg: #fff; --card: #fff; --text: #000; --muted: #444; --border: #bbb; --code: #f1f1f1;
+      --ok: #116b37; --bad: #a11d1d; --warn: #8a5a10; --accent: #1d4fb0;
+    }
+    body { background: #fff; }
+    main { max-width: none; padding: 0; }
+    .no-print { display: none !important; }
+    .print-only { display: block; }
+    .card { break-inside: avoid; }
+    #historyCard .row { display: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>PlayStation Controller Checker</h1>
+  <p class="sub">Tells a genuine Sony DualShock 4 (PS4) or DualSense (PS5) controller from a clone, and grades how well it works: stick drift, buttons, triggers, sensors, lightbar, rumble, battery and Bluetooth.</p>
+
+  <div id="printHead" class="print-only card">
+    <h2>Controller test report</h2>
+    <div id="printMeta"></div>
+  </div>
+
+  <div class="card no-print">
+    <h2>Before you start</h2>
+    <ol>
+      <li>Use <b>Chrome or Edge</b> on a computer.</li>
+      <li>Plug the controller in with a <b>USB data cable</b>. The real-or-fake checks need USB. The live tests, battery and Bluetooth signal tests also work over Bluetooth.</li>
+      <li><b>Quit Steam</b> (right-click its icon by the clock and choose Exit) and DS4Windows if you have it, since they can lock the controller.</li>
+      <li>Click <b>Connect &amp; test</b> and pick "Wireless Controller" (PS4) or "DualSense Wireless Controller" (PS5).</li>
+    </ol>
+    <p id="nohid" class="err hidden">This browser can't talk to USB controllers (WebHID). Open this page in Chrome or Edge, from an https:// address or http://localhost.</p>
+    <div class="row" style="margin-top:14px">
+      <button id="go">Connect &amp; test</button>
+      <span id="conn" class="detail"></span>
+    </div>
+  </div>
+
+  <div id="verdict" class="card">
+    <div class="big" id="vtitle"></div>
+    <div id="vtext"></div>
+  </div>
+
+  <div id="scoreCard" class="card hidden">
+    <h2>Quality score</h2>
+    <p class="detail" style="margin-top:0">How well the controller works, whether it's genuine or not. It fills in as you run the live tests.</p>
+    <div class="scorehead"><span id="scoreBig">–</span><span id="scoreGrade"></span></div>
+    <div id="scoreRows"></div>
+    <p class="detail" id="scoreNote" style="margin-bottom:0"></p>
+  </div>
+
+  <div id="shareCard" class="card hidden no-print">
+    <h2>Share this result</h2>
+    <p class="detail" style="margin-top:0">Save a report to show a buyer or seller, or to keep. It includes everything tested so far, so run the live tests first for a complete report.</p>
+    <div class="row">
+      <button id="btnPdf">Save as PDF</button>
+      <button id="btnCopy" class="secondary">Copy text summary</button>
+      <button id="btnJson" class="secondary">Download data (JSON)</button>
+      <span id="shareStatus" class="detail"></span>
+    </div>
+  </div>
+
+  <div id="historyCard" class="card hidden">
+    <h2>History for this controller</h2>
+    <div id="historyBody"></div>
+    <div class="row" style="margin-top:10px">
+      <button id="btnHistExport" class="secondary">Export all history</button>
+      <button id="btnHistClear" class="secondary">Forget this controller</button>
+      <span id="histStatus" class="detail"></span>
+    </div>
+  </div>
+
+  <div id="live" class="card hidden no-print">
+    <h2>Live tests</h2>
+    <div class="tabs" id="tabs">
+      <button data-tab="sticks" class="on">Sticks &amp; deadzone</button>
+      <button data-tab="buttons">Buttons</button>
+      <button data-tab="triggers">Triggers</button>
+      <button data-tab="motion">Motion &amp; touchpad</button>
+      <button data-tab="lights">Lightbar &amp; rumble</button>
+      <button data-tab="power">Battery &amp; Bluetooth</button>
+      <button data-tab="aim">Aim</button>
+    </div>
+
+    <section data-panel="aim" class="hidden">
+      <h3 style="margin-top:0">Recommended aim settings</h3>
+      <div id="aimSettings" class="note" style="margin-top:0"></div>
+
+      <h3>Aim precision (right stick)</h3>
+      <p class="detail" style="margin-top:0"><b>Step 1:</b> push the right stick about a quarter of the way in any direction and hold it as still as you can. <b>Step 2:</b> move it slowly in a small circle, about a third of the way out. A healthy stick moves in tiny, even steps. A worn one jumps, which makes small aim adjustments jerky.</p>
+      <div class="row"><button id="btnAimHold">Step 1: Hold steady (3s)</button><button id="btnAimCircle">Step 2: Slow circle (8s)</button><span id="aimStatus" class="detail"></span></div>
+
+      <h3>Best settings for your game</h3>
+      <p class="detail" style="margin-top:0">Five popular setups per game, based on common community and pro settings. Click <b>Test all 5</b> to play a short aim round below with each one (6 targets each, about a minute). The checker picks the one you aim best with and fine-tunes it for you. Deadzones come from your stick measurements, so run the Sticks and Triggers tests first.</p>
+      <div class="row">
+        <label class="row" style="gap:6px">Game <select id="gameSel" aria-label="Game">
+          <option value="cod">Call of Duty (Black Ops 6, Warzone, MW3)</option>
+          <option value="fortnite">Fortnite</option>
+        </select></label>
+        <button id="btnTestAll">Test all 5</button>
+        <span id="finderStatus" class="detail"></span>
+      </div>
+      <p class="detail" id="gameWhere"></p>
+      <div class="tablewrap"><table class="gametable"><thead><tr><th>Setup</th><th>Settings</th><th>Your score</th><th></th></tr></thead><tbody id="presetRows"></tbody></table></div>
+      <div id="finderResult" class="note hidden"></div>
+
+      <h3>Aim trainer</h3>
+      <p class="detail" style="margin-top:0">Steer the crosshair onto each target with the right stick and hold it there for a moment. It times how fast you get on target and counts overshoots (sliding off a target you'd reached). Try different settings and compare your scores.</p>
+      <div class="row aimctl">
+        <label>Deadzone <input type="range" id="trDz" min="0" max="25" value="6" aria-label="Trainer deadzone"> <span id="trDzV" class="mono">6%</span></label>
+        <label>Curve <select id="trCurve" aria-label="Response curve"><option value="linear">Linear</option><option value="standard" selected>Standard</option><option value="dynamic">Dynamic</option><option value="exponential">Exponential</option></select></label>
+        <label>Sensitivity <input type="range" id="trSens" min="5" max="20" value="10" aria-label="Trainer sensitivity"> <span id="trSensV" class="mono">1.0</span></label>
+        <button id="btnTrDz" class="secondary">Use recommended deadzone</button>
+      </div>
+      <canvas id="trCanvas" width="720" height="360"></canvas>
+      <div class="row"><button id="btnTrain">Start (10 targets)</button><span id="trStatus" class="detail"></span></div>
+      <div id="trResults"></div>
+    </section>
+
+    <section data-panel="sticks">
+      <div class="sticks">
+        <div class="stick"><canvas class="pad" id="cvL" width="400" height="400"></canvas><div class="mono" id="txtL">L: –</div></div>
+        <div class="stick"><canvas class="pad" id="cvR" width="400" height="400"></canvas><div class="mono" id="txtR">R: –</div></div>
+      </div>
+      <p class="detail">Blue dots show everywhere each stick has been. The orange circle is the deadzone you'd need to hide drift.</p>
+      <h3>Step 1: Drift (resting deadzone)</h3>
+      <p class="detail" style="margin-top:0">Let go of both sticks completely and set the controller on a table.</p>
+      <div class="row"><button id="btnDrift">Measure drift (3s)</button><span id="driftStatus" class="detail"></span></div>
+      <h3>Step 2: Range &amp; circularity</h3>
+      <p class="detail" style="margin-top:0">Rotate <b>both</b> sticks slowly around the outer edge, pressing them all the way out, a few times.</p>
+      <div class="row"><button id="btnRange">Measure range (8s)</button><button id="btnClearTrace" class="secondary">Clear trace</button><span id="rangeStatus" class="detail"></span></div>
+      <div id="stickReport" class="note hidden"></div>
+    </section>
+
+    <section data-panel="buttons" class="hidden">
+      <p class="detail" style="margin-top:0" id="btnIntro">Press every button once. Each turns green when it registers. L2 and R2 are on the Triggers tab.</p>
+      <div class="btngrid" id="btngrid"></div>
+      <div class="row" style="margin-top:12px"><span id="btnCount" class="detail">0 buttons</span><button id="btnBtnsDone" class="secondary">Record result</button></div>
+    </section>
+
+    <section data-panel="triggers" class="hidden">
+      <p class="detail" style="margin-top:0">Squeeze L2 and R2 slowly all the way down and back up. Genuine triggers are analog: they move smoothly through about 256 levels. Many clones are digital (just on or off).</p>
+      <div class="trig"><b>L2</b><div class="meter"><div id="mL2"></div></div><span class="mono" id="vL2">0</span></div>
+      <div class="trig"><b>R2</b><div class="meter"><div id="mR2"></div></div><span class="mono" id="vR2">0</span></div>
+      <p class="detail" id="trigLevels">Distinct levels seen: L2 0, R2 0</p>
+      <button id="btnTrigDone" class="secondary">Record result</button>
+    </section>
+
+    <section data-panel="motion" class="hidden">
+      <p class="detail" style="margin-top:0">Click start, then tilt and twist the controller and swipe a finger across the touchpad.</p>
+      <div>Gyro movement <div class="meter"><div id="mGyro"></div></div></div>
+      <div style="margin-top:8px">Accelerometer movement <div class="meter"><div id="mAcc"></div></div></div>
+      <div style="margin-top:8px">Touchpad: <b id="touchState">–</b> <span class="mono" id="touchXY"></span></div>
+      <div class="row" style="margin-top:12px"><button id="btnMotion">Start motion test (8s)</button><span id="motionStatus" class="detail"></span></div>
+    </section>
+
+    <section data-panel="lights" class="hidden">
+      <p class="detail" style="margin-top:0">This is a blind test. The page sets the lightbar to a colour in random order and you click the colour you actually see. A genuine controller always shows exactly the colour it's sent. Then each rumble motor runs on its own (a heavy one on the left, a light one on the right) and you say which side you felt.</p>
+      <div class="row"><button id="btnLights">Start lightbar &amp; rumble test</button><span id="lightStatus" class="detail"></span></div>
+      <div id="lightQ" class="note hidden">
+        <div id="lightQText" style="margin-bottom:8px;font-weight:600"></div>
+        <div class="row" id="lightQBtns"></div>
+      </div>
+      <h3>Try any colour</h3>
+      <div class="row"><input type="color" id="colorPick" value="#ff0000" aria-label="Lightbar colour"><button id="btnSetColor" class="secondary">Set lightbar to this colour</button></div>
+    </section>
+
+    <section data-panel="power" class="hidden">
+      <h3 style="margin-top:0">Battery</h3>
+      <div class="srow"><span>Charge</span><div class="meter"><div id="mBat"></div></div><span class="mono" id="vBat">–</span></div>
+      <p class="detail" id="batState">–</p>
+      <p class="detail">Controllers only report battery in 10% steps and don't report battery health. To judge the battery, run the monitor and leave this tab open. Plugged in, it times charging; on Bluetooth (unplugged), it times draining. A healthy controller charges from empty in about 2–3 hours and lasts about 4–8 hours (less with a bright lightbar).</p>
+      <div class="row"><button id="btnBatMon">Start battery monitor</button><span id="batMonStatus" class="detail"></span></div>
+      <div id="batLog" class="note hidden"></div>
+
+      <h3>Bluetooth</h3>
+      <p id="btInfo">–</p>
+      <p class="detail">To test over Bluetooth, unplug the cable and press the <b>PS</b> button. If it isn't paired yet, hold <b>Share + PS</b> (PS4) or <b>Create + PS</b> (PS5) until the light flashes quickly, then add it in Windows Settings → Bluetooth &amp; devices. Then click <b>Connect &amp; test</b> again and pick it.</p>
+      <p class="detail">Signal test: once connected over Bluetooth, start this and move to where you normally sit (or further). It counts dropouts, meaning gaps of more than 50 ms with no updates, which you'd feel as stutter or lag.</p>
+      <div class="row"><button id="btnBtTest">Run signal test (15s)</button><span id="btStatus" class="detail"></span></div>
+    </section>
+  </div>
+
+  <div id="resultsCard" class="card hidden">
+    <h2>Checks</h2>
+    <table><tbody id="results"></tbody></table>
+  </div>
+
+  <div class="card no-print">
+    <h2>How it works</h2>
+    <p style="margin-top:0"><b>DualShock 4 security chip (the strongest test):</b> every genuine DS4 contains a Sony security chip so the PS4 can confirm it's authentic. This page runs the same handshake: it sends a random 256‑byte challenge, the controller signs it with its private RSA key, and the page checks the signature. Most clones don't have the chip.</p>
+    <p><b>DualShock Tools' clone checks:</b> a genuine DS4 answers Sony's hidden 0x81 report instantly and returns a firmware report of exactly 49 bytes. A genuine DualSense answers Sony's stick-calibration query, returns a 64-byte firmware report, and never has a firmware date in the future. Both report a known circuit board (JDM-0xx for DS4, BDM-0xx for DualSense). These checks come from the open-source DualShock Tools project (MIT licence).</p>
+    <p><b>DualSense limitation:</b> there's no public, verified way to run the PS5 security handshake, so DualSense results are a strong sign, not cryptographic proof.</p>
+    <p><b>Clues:</b> factory sensor calibration, USB report rate (genuine controllers send about 250 updates a second), the internal sensor timestamp, analog triggers, every button, gyro, touchpad, RGB lightbar and dual rumble. Cheap clones usually fail several of these.</p>
+    <p><b>Third-party controllers:</b> controllers like the Gioteck VX4 copy Sony's ID so a PS4 accepts them, but their hardware gives them away: the board doesn't match the model they claim, and their sensor calibration is a generic default instead of factory-measured. These checks work over Bluetooth too. Over USB on a PC, the VX4 acts as an Xbox 360 controller instead, so connect it over Bluetooth to test it here.</p>
+    <p><b>Condition, not authenticity:</b> stick drift and deadzone show wear. A worn genuine controller can drift badly, and a new clone can have none.</p>
+    <p><b>Physical checks:</b> a genuine controller's circuit board is printed JDM-0xx (PS4) or BDM-0xx (PS5), its screws and battery label look like Sony's, and it can wake a PlayStation from rest mode.</p>
+    <p class="detail">Limitation: Sony's root public key isn't published, so this page can't check Sony's signature on a DS4's certificate. A clone carrying a key copied from a real controller would still pass the handshake. That's rare in practice.</p>
+  </div>
+
+  <details class="card no-print">
+    <summary>Raw log</summary>
+    <pre id="log"></pre>
+  </details>
+</main>
+
+<script>
+(() => {
+  const TOOL = { name: "PlayStation Controller Checker", version: "2.0.0" };
+  const SONY_VID = 0x054C;
+  const MODELS = {
+    0x05C4: { type: "ds4", name: "DualShock 4 (CUH-ZCT1, 1st gen)" },
+    0x09CC: { type: "ds4", name: "DualShock 4 (CUH-ZCT2, 2nd gen)" },
+    0x0CE6: { type: "ds5", name: "DualSense (PS5)" },
+    0x0DF2: { type: "ds5", name: "DualSense Edge (PS5)" },
+  };
+  const ADAPTER_PID = 0x0BA0;
+  // Input report layouts, as offsets into the report payload (report ID removed, Bluetooth header skipped)
+  const LAYOUT = {
+    ds4: { l2: 7, r2: 8, btn: 4, gyro: 12, acc: 18, ts: 9, tsBytes: 2, touch: 34, bat: 29, ctr: d => d.getUint8(6) >> 2, btId: 0x11, btOff: 2, len: { usb: 63, bt: 77 } },
+    ds5: { l2: 4, r2: 5, btn: 7, gyro: 15, acc: 21, ts: 27, tsBytes: 4, touch: 32, bat: 52, ctr: d => d.getUint8(6), btId: 0x31, btOff: 1, len: { usb: 63, bt: 77 } },
+  };
+
+  const $ = id => document.getElementById(id);
+  const logEl = $("log");
+  const log = (...a) => { logEl.textContent += a.join(" ") + "\n"; };
+  const hex = (u8, max = 64) => Array.from(u8.slice(0, max)).map(b => b.toString(16).padStart(2, "0")).join(" ") + (u8.length > max ? " …" : "");
+  const toHex = u8 => Array.from(u8).map(b => b.toString(16).padStart(2, "0")).join("");
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  let device = null;
+  let devType = "ds4";          // "ds4" or "ds5"
+  let transport = "usb";        // "usb" or "bt"
+  let modelName = "";
+  const results = new Map();    // key -> {status, name, detail}
+  const info = { board: "", firmware: "", keySerial: "" };
+  let evidence = null;          // DS4 auth handshake data, for the JSON report
+  const isDS5 = () => devType === "ds5";
+  const padName = () => isDS5() ? "DualSense" : "DS4";
+
+  function addResult(status, name, detail = "", key = name) {
+    let tr = document.querySelector(`tr[data-key="${CSS.escape(key)}"]`);
+    if (!tr) { tr = document.createElement("tr"); tr.dataset.key = key; $("results").appendChild(tr); }
+    tr.innerHTML = `<td class="s ${status}">${status}</td><td><div>${esc(name)}</div>${detail ? `<div class="detail">${esc(detail)}</div>` : ""}</td>`;
+    results.set(key, { status, name, detail });
+    $("resultsCard").classList.remove("hidden");
+    log(`[${status}] ${name} ${detail}`);
+  }
+
+  function setVerdict(kind, title, text) {
+    const v = $("verdict");
+    v.className = "card " + kind;
+    v.style.display = "block";
+    $("vtitle").textContent = title;
+    $("vtext").innerHTML = text;
+  }
+
+  // ---------- Quality score (independent of authenticity) ----------
+  const CATS = [
+    { id: "sticks", name: "Sticks", w: 30 },
+    { id: "triggers", name: "Triggers", w: 15 },
+    { id: "buttons", name: "Buttons", w: 15 },
+    { id: "motion", name: "Motion & touchpad", w: 15 },
+    { id: "resp", name: "Responsiveness", w: 15 },
+    { id: "lights", name: "Lightbar & rumble", w: 10 },
+    { id: "battery", name: "Battery", w: 10 },
+  ];
+  const scores = {};
+  const clamp01 = v => Math.max(0, Math.min(1, v));
+  const lin = (v, good, bad) => clamp01((v - bad) / (good - bad));   // 1 at "good", 0 at "bad"
+  const scoreColor = v => v >= 0.8 ? "var(--ok)" : v >= 0.5 ? "var(--warn)" : "var(--bad)";
+  const gradeOf = o => o >= 90 ? "Excellent" : o >= 75 ? "Good" : o >= 55 ? "Fair" : "Poor";
+  function setScore(cat, key, v) { (scores[cat] ||= {})[key] = clamp01(v); renderScore(); }
+  function scoreSummary() {
+    let tot = 0, wsum = 0;
+    const categories = {};
+    for (const c of CATS) {
+      const vals = Object.values(scores[c.id] || {});
+      if (!vals.length) continue;
+      const v = vals.reduce((a, b) => a + b, 0) / vals.length;
+      categories[c.id] = Math.round(v * 100);
+      tot += v * c.w; wsum += c.w;
+    }
+    const overall = wsum ? Math.round(tot / wsum * 100) : null;
+    return { overall, grade: overall == null ? null : gradeOf(overall), categories, tested: Object.keys(categories).length, of: CATS.length };
+  }
+  function renderScore() {
+    const sum = scoreSummary();
+    $("scoreRows").innerHTML = CATS.map(c => {
+      const v = sum.categories[c.id];
+      if (v == null) return `<div class="srow"><span>${c.name}</span><div class="meter"><div></div></div><span class="detail">not tested</span></div>`;
+      return `<div class="srow"><span>${c.name}</span><div class="meter"><div style="width:${v}%;background:${scoreColor(v / 100)}"></div></div><span class="mono">${v}/100</span></div>`;
+    }).join("");
+    $("scoreCard").classList.toggle("hidden", sum.overall == null);
+    if (sum.overall == null) return;
+    $("scoreBig").textContent = sum.overall + "/100";
+    $("scoreBig").style.color = scoreColor(sum.overall / 100);
+    $("scoreGrade").textContent = sum.grade;
+    $("scoreNote").textContent = sum.tested < sum.of
+      ? `Based on ${sum.tested} of ${sum.of} categories so far. Run the other live tests for a full score.`
+      : "All categories tested.";
+  }
+
+  // ---------- CRC32 ----------
+  const CRC_TABLE = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+    return t;
+  })();
+  function crc32(u8) { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+
+  // Feature report payload without the leading report ID byte
+  async function getFeature(id) {
+    const dv = await device.receiveFeatureReport(id);
+    let u8 = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
+    if (u8.length && u8[0] === id) u8 = u8.slice(1);
+    return u8;
+  }
+  const withTimeout = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(what + " timed out")), ms))]);
+  const b64url = u8 => btoa(String.fromCharCode(...u8)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const stripZeros = u8 => { let i = 0; while (i < u8.length - 1 && u8[i] === 0) i++; return u8.slice(i); };
+  const decodeStr = u8 => new TextDecoder().decode(u8).replace(/\0/g, "").trim();
+  const macFmt = a => Array.from(a).reverse().map(b => b.toString(16).padStart(2, "0")).join(":").toUpperCase();
+  const blankBytes = a => a.length < 6 || a.every(b => b === 0) || a.every(b => b === 0xFF);
+
+  // =====================================================================
+  //  LIVE INPUT STATE
+  // =====================================================================
+  const S = {
+    reports: 0, shortReports: 0, len: 0, reportId: 0, lx: 128, ly: 128, rx: 128, ry: 128, l2: 0, r2: 0,
+    btn: {}, gyro: [0, 0, 0], acc: [0, 0, 0], touch: false, tx: 0, ty: 0,
+    ts: 0, tsChanges: 0, counter: 0, counterChanges: 0,
+    batSteps: 0, cable: false, full: false, batRaw: "",
+    times: [],
+  };
+  const traceL = [], traceR = [];
+  let recorder = null;                      // optional per-report callback for timed tests
+  const seenBtn = new Set();
+  const l2Levels = new Set(), r2Levels = new Set();
+
+  function resetLiveState() {
+    Object.assign(S, { reports: 0, shortReports: 0, len: 0, reportId: 0, tsChanges: 0, counterChanges: 0, times: [] });
+    traceL.length = 0; traceR.length = 0; seenBtn.clear(); l2Levels.clear(); r2Levels.clear();
+    dz.L = dz.R = 0; dzPct.L = dzPct.R = null; rangeStats.L = rangeStats.R = null;
+    aimPrec.hold = aimPrec.circle = null; trainerRuns.length = 0; trigRest.L2 = trigRest.R2 = null;
+    renderAimSettings(); renderTrainerRuns();
+  }
+
+  function parseInput(ev) {
+    const Y = LAYOUT[devType];
+    let off;
+    if (ev.reportId === 0x01 && ev.data.byteLength >= 60) off = 0;
+    else if (ev.reportId === Y.btId && ev.data.byteLength >= 60) off = Y.btOff;
+    else { S.shortReports++; return; }
+    const d = new DataView(ev.data.buffer, ev.data.byteOffset + off, ev.data.byteLength - off);
+    S.reports++; S.len = ev.data.byteLength; S.reportId = ev.reportId;
+    S.times.push(performance.now()); if (S.times.length > 600) S.times.shift();
+    S.lx = d.getUint8(0); S.ly = d.getUint8(1); S.rx = d.getUint8(2); S.ry = d.getUint8(3);
+    const b0 = d.getUint8(Y.btn), b1 = d.getUint8(Y.btn + 1), b2 = d.getUint8(Y.btn + 2);
+    const dpad = b0 & 0x0F;
+    const btn = {
+      Up: [7, 0, 1].includes(dpad), Right: [1, 2, 3].includes(dpad), Down: [3, 4, 5].includes(dpad), Left: [5, 6, 7].includes(dpad),
+      Square: !!(b0 & 0x10), Cross: !!(b0 & 0x20), Circle: !!(b0 & 0x40), Triangle: !!(b0 & 0x80),
+      L1: !!(b1 & 0x01), R1: !!(b1 & 0x02), L2: !!(b1 & 0x04), R2: !!(b1 & 0x08),
+      Share: !!(b1 & 0x10), Options: !!(b1 & 0x20), L3: !!(b1 & 0x40), R3: !!(b1 & 0x80),
+      PS: !!(b2 & 0x01), "Touchpad click": !!(b2 & 0x02), Mute: isDS5() && !!(b2 & 0x04),
+    };
+    S.btn = btn;
+    for (const k in btn) if (btn[k] && k !== "L2" && k !== "R2") seenBtn.add(k);
+    const counter = Y.ctr(d);
+    if (counter !== S.counter) S.counterChanges++;
+    S.counter = counter;
+    S.l2 = d.getUint8(Y.l2); S.r2 = d.getUint8(Y.r2);
+    l2Levels.add(S.l2); r2Levels.add(S.r2);
+    const ts = Y.tsBytes === 4 ? d.getUint32(Y.ts, true) : d.getUint16(Y.ts, true);
+    if (ts !== S.ts) S.tsChanges++;
+    S.ts = ts;
+    const bb = d.getUint8(Y.bat);
+    if (isDS5()) {        // low nibble = level 0-10, high nibble = 0 on battery, 1 charging, 2 full, 15 flat & charging
+      const lvl = bb & 0x0F, st = bb >> 4;
+      S.cable = st === 1 || st === 2 || st === 15; S.full = st === 2;
+      S.batSteps = S.full ? 10 : Math.min(lvl, 10); S.batRaw = `level ${lvl}, status ${st}`;
+    } else {              // low nibble = level (0-10 on battery, 0-11 on cable, 11 = full), bit 4 = cable
+      const lvl = bb & 0x0F;
+      S.cable = !!(bb & 0x10); S.full = S.cable && lvl >= 11;
+      S.batSteps = Math.min(lvl, 10); S.batRaw = `level ${lvl}/${S.cable ? 11 : 10}`;
+    }
+    for (let i = 0; i < 3; i++) { S.gyro[i] = d.getInt16(Y.gyro + i * 2, true); S.acc[i] = d.getInt16(Y.acc + i * 2, true); }
+    S.touch = (d.getUint8(Y.touch) & 0x80) === 0;
+    if (S.touch) { const t = Y.touch; S.tx = d.getUint8(t + 1) | ((d.getUint8(t + 2) & 0x0F) << 8); S.ty = (d.getUint8(t + 2) >> 4) | (d.getUint8(t + 3) << 4); }
+
+    pushTrace(traceL, norm(S.lx, S.ly)); pushTrace(traceR, norm(S.rx, S.ry));
+    if (recorder) recorder(S);
+  }
+  const norm = (x, y) => [(x - 127.5) / 127.5, (y - 127.5) / 127.5];
+  function pushTrace(arr, p) {
+    const last = arr[arr.length - 1];
+    if (!last || Math.abs(last[0] - p[0]) > 0.004 || Math.abs(last[1] - p[1]) > 0.004) { arr.push(p); if (arr.length > 4000) arr.shift(); }
+  }
+  const batteryPct = () => S.full ? 100 : Math.min(100, S.batSteps * 10);
+
+  // ---------- drawing ----------
+  const dz = { L: 0, R: 0 }, dzPct = { L: null, R: null };
+  function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+  function drawPad(cv, trace, cur, dzr) {
+    const g = cv.getContext("2d"), W = cv.width, c = W / 2, r = W / 2 - 14;
+    g.clearRect(0, 0, W, W);
+    g.strokeStyle = cssVar("--border"); g.lineWidth = 2;
+    g.beginPath(); g.arc(c, c, r, 0, Math.PI * 2); g.stroke();
+    g.beginPath(); g.moveTo(c - r, c); g.lineTo(c + r, c); g.moveTo(c, c - r); g.lineTo(c, c + r); g.stroke();
+    if (dzr > 0) { g.fillStyle = cssVar("--dz"); g.beginPath(); g.arc(c, c, Math.max(4, dzr * r), 0, Math.PI * 2); g.fill(); }
+    g.fillStyle = cssVar("--trace");
+    for (const p of trace) g.fillRect(c + p[0] * r - 2, c + p[1] * r - 2, 4, 4);
+    g.fillStyle = cssVar("--accent");
+    g.beginPath(); g.arc(c + cur[0] * r, c + cur[1] * r, 10, 0, Math.PI * 2); g.fill();
+  }
+
+  async function detectTransport() {
+    const Y = LAYOUT[devType];
+    S.reportId = 0; S.shortReports = 0;
+    await sleep(300);
+    if (S.reportId === 0x01) return "usb";
+    if (S.reportId === Y.btId) return "bt";
+    // Reading calibration over Bluetooth switches the controller into full reports
+    for (const id of [0x05, 0x02]) {
+      try { await withTimeout(device.receiveFeatureReport(id), 1500, "feature"); } catch (_) {}
+      await sleep(400);
+      if (S.reportId === Y.btId) return "bt";
+      if (S.reportId === 0x01) return "usb";
+    }
+    return S.shortReports > 0 ? "bt" : "usb";
+  }
+
+  let rafOn = false;
+  function frame() {
+    if (!rafOn) return;
+    drawPad($("cvL"), traceL, norm(S.lx, S.ly), dz.L); drawPad($("cvR"), traceR, norm(S.rx, S.ry), dz.R);
+    $("txtL").textContent = `L: x ${String(S.lx).padStart(3)}  y ${String(S.ly).padStart(3)}`;
+    $("txtR").textContent = `R: x ${String(S.rx).padStart(3)}  y ${String(S.ry).padStart(3)}`;
+    for (const el of $("btngrid").children) {
+      const n = el.dataset.b;
+      el.classList.toggle("down", !!S.btn[n]);
+      el.classList.toggle("seen", seenBtn.has(n));
+    }
+    $("btnCount").textContent = `${allButtons().filter(b => seenBtn.has(b.key)).length} / ${allButtons().length} buttons`;
+    $("mL2").style.width = (S.l2 / 2.55) + "%"; $("vL2").textContent = S.l2;
+    $("mR2").style.width = (S.r2 / 2.55) + "%"; $("vR2").textContent = S.r2;
+    $("trigLevels").textContent = `Distinct levels seen: L2 ${l2Levels.size}, R2 ${r2Levels.size}`;
+    $("touchState").textContent = S.touch ? "touching" : "not touching";
+    $("touchXY").textContent = S.touch ? `(${S.tx}, ${S.ty})` : "";
+    const bp = batteryPct();
+    $("mBat").style.width = bp + "%";
+    $("mBat").style.background = scoreColor(bp / 100);
+    $("vBat").textContent = S.reports ? `~${bp}%` : "–";
+    $("batState").textContent = !S.reports ? "–" : S.cable ? (S.full ? "Plugged in, fully charged" : "Plugged in, charging") : "On battery (not charging)";
+    requestAnimationFrame(frame);
+  }
+
+  // =====================================================================
+  //  AUTOMATIC CHECKS: DualShock 4
+  // =====================================================================
+  function boardDS4(hwMin) {   // mapping from DualShock Tools (MIT)
+    const a = hwMin >> 8;
+    return a === 0x31 ? "JDM-001 (1st gen, 2013)" : a === 0x43 ? "JDM-011 (1st gen)" : a === 0x54 ? "JDM-030 (1st gen, 2015)"
+      : (a >= 0x64 && a <= 0x74) ? "JDM-040 (2nd gen)" : ((a > 0x80 && a < 0x84) || a === 0x93) ? "JDM-020 (1st gen)"
+      : (a === 0xa4 || a === 0x90 || a === 0xa0) ? "JDM-050 (2nd gen)" : a === 0xb0 ? "JDM-055 (2nd gen, possibly Scuf)" : a === 0xb4 ? "JDM-055 (2nd gen)" : null;
+  }
+  function boardGenDS4(hwMin) {   // JDM-001/011/020/030 = 1st gen (CUH-ZCT1); JDM-040/050/055 = 2nd gen (CUH-ZCT2)
+    const a = hwMin >> 8;
+    if (a === 0x31 || a === 0x43 || a === 0x54 || (a > 0x80 && a < 0x84) || a === 0x93) return 1;
+    if ((a >= 0x64 && a <= 0x74) || a === 0xa4 || a === 0x90 || a === 0xa0 || a === 0xb0 || a === 0xb4) return 2;
+    return null;
+  }
+  function boardDS5(hwinfo) {  // mapping from DualShock Tools (MIT)
+    const a = (hwinfo >> 8) & 0xff;
+    return a === 0x03 ? "BDM-010" : a === 0x04 ? "BDM-020" : a === 0x05 ? "BDM-030" : a === 0x06 ? "BDM-040"
+      : (a === 0x07 || a === 0x08) ? "BDM-050" : a === 0x09 ? "BDM-060R" : a === 0x11 ? "BDM-060M" : a === 0x13 ? "BDM-060X" : null;
+  }
+  function reportBoard(name, code, family) {
+    info.board = name || "";
+    addResult(name ? "PASS" : "WARN", name ? `Circuit board: ${name}` : `Unrecognised circuit board (hardware code 0x${code.toString(16)})`,
+      name ? "A known Sony board revision. If you open the controller, the board is printed with this name." : `Not one of Sony's known ${family} boards.`, "board");
+  }
+
+  async function checkFirmwareDS4() {
+    try {
+      const d = await withTimeout(getFeature(0xA3), 2000, "0xA3");
+      log("0xA3:", hex(d));
+      const dateStr = decodeStr(d.slice(0, 11)), timeStr = decodeStr(d.slice(16, 24));
+      const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
+      const hwMaj = d.length > 0x23 ? dv.getUint16(0x20, true) : 0, hwMin = d.length > 0x23 ? dv.getUint16(0x22, true) : 0;
+      const fwMaj = d.length > 0x29 ? dv.getUint32(0x24, true) : 0, fwMin = d.length > 0x29 ? dv.getUint16(0x28, true) : 0;
+      const dateOk = /^[A-Z][a-z]{2}\s+\d{1,2}\s+20\d\d$/.test(dateStr) && !isNaN(Date.parse(dateStr));
+      info.firmware = `${dateStr} ${timeStr}, HW ${hwMaj.toString(16)}.${hwMin.toString(16)}, FW ${fwMaj.toString(16)}.${fwMin.toString(16)}`;
+      addResult(dateOk ? "PASS" : "WARN", dateOk ? "Firmware info report looks normal" : "Firmware info report is malformed", `Build date ${info.firmware}`, "fw");
+      if (transport === "usb") {
+        addResult(d.length === 48 ? "PASS" : "FAIL", d.length === 48 ? "Firmware report is the exact genuine size (49 bytes)" : `Firmware report is ${d.length + 1} bytes, not 49`,
+          d.length === 48 ? "" : "DualShock Tools flags this as a clone.", "fwlen");
+      }
+      reportBoard(boardDS4(hwMin), hwMin >> 8, "DS4 (JDM-001 to JDM-055)");
+      // A genuine controller's board always matches the model its USB/Bluetooth ID claims.
+      // Third-party pads (e.g. Gioteck VX4) and clones copy the 2nd-gen ID but report a 1st-gen board.
+      const gen = boardGenDS4(hwMin), claimed = device.productId === 0x09CC ? 2 : device.productId === 0x05C4 ? 1 : null;
+      if (gen && claimed) {
+        if (gen === claimed) addResult("PASS", `Board matches the model it claims (${gen === 1 ? "1st" : "2nd"} gen)`, "", "genmatch");
+        else addResult("FAIL", "Hardware doesn't match the model it claims",
+          `It reports the ${claimed === 2 ? "2nd-gen (CUH-ZCT2)" : "1st-gen (CUH-ZCT1)"} DualShock 4 ID, but its board and firmware are ${gen === 1 ? "1st" : "2nd"}-gen (${info.board}, built ${dateStr}). Genuine controllers always match. Third-party controllers and clones copy Sony's IDs.`, "genmatch");
+      }
+    } catch (e) {
+      if (transport === "bt") addResult("WARN", "Firmware info not readable over Bluetooth", "Plug in with USB to check this. " + e.message, "fw");
+      else addResult("FAIL", "Firmware info report (0xA3) not supported", "Genuine DS4s always answer this. " + e.message, "fw");
+    }
+  }
+
+  // DualShock Tools' main DS4 clone check: genuine controllers answer feature report 0x81 instantly; clones ignore it
+  async function checkProbe81() {
+    if (transport !== "usb") return;
+    try {
+      const d = await withTimeout(getFeature(0x81), 1000, "0x81");
+      log("0x81:", hex(d));
+      addResult("PASS", "Answers Sony's hidden 0x81 report", "DualShock Tools' genuine check: clones don't answer this.", "r81");
+    } catch (e) {
+      addResult("FAIL", "Doesn't answer Sony's hidden 0x81 report", "DualShock Tools treats this as a clone. " + e.message, "r81");
+    }
+  }
+
+  async function checkAuthDS4() {
+    if (transport === "bt") {
+      addResult("INFO", "Security chip test skipped (needs USB)", "The PS4 authentication handshake only runs over a USB cable.", "auth");
+      return "bt";
+    }
+    // 0xF3 (reset / page size) only exists on 2nd-gen controllers. 1st-gen (CUH-ZCT1) go straight to 0xF0,
+    // so a missing 0xF3 is NOT a clone sign by itself (confirmed on a genuine 2015 CUH-ZCT1).
+    try { const f3 = await withTimeout(getFeature(0xF3), 2000, "0xF3"); log("0xF3:", hex(f3)); }
+    catch (e) { log("0xF3 not supported (normal on 1st-gen DS4):", e.message); }
+
+    const seq = 1 + Math.floor(Math.random() * 254);
+    const nonce = crypto.getRandomValues(new Uint8Array(256));
+    try {
+      for (let page = 0; page < 5; page++) {
+        const buf = new Uint8Array(64);
+        buf[0] = 0xF0; buf[1] = seq; buf[2] = page; buf[3] = 0;
+        buf.set(nonce.subarray(page * 56, Math.min(256, (page + 1) * 56)), 4);
+        new DataView(buf.buffer).setUint32(60, crc32(buf.subarray(0, 60)), true);
+        await withTimeout(device.sendFeatureReport(0xF0, buf.subarray(1)), 2000, "0xF0 page " + page);
+      }
+    } catch (e) { addResult("FAIL", "No PS4 security chip: the controller rejected the auth challenge", "Every genuine DS4 accepts this. This is the most common sign of a clone. " + e.message, "auth"); return "unsupported"; }
+
+    const deadline = Date.now() + 10000;
+    let ready = false;
+    try {
+      while (Date.now() < deadline) {
+        const st = await withTimeout(getFeature(0xF2), 2000, "0xF2");
+        if (st[0] === seq && st[1] === 0x00) { ready = true; break; }
+        await sleep(150);
+      }
+    } catch (e) { addResult("FAIL", "Auth status report (0xF2) failed", e.message, "auth"); return "broken"; }
+    if (!ready) { addResult("FAIL", "Controller never finished signing the challenge", "Waited 10 seconds.", "auth"); return "broken"; }
+
+    const resp = new Uint8Array(19 * 56);
+    try {
+      for (let i = 0; i < 19; i++) {
+        const p = await withTimeout(getFeature(0xF1), 2000, "0xF1");
+        const page = p[1];
+        if (page > 18) throw new Error("unexpected page " + page);
+        resp.set(p.subarray(3, 59), page * 56);
+      }
+    } catch (e) { addResult("FAIL", "Couldn't read the auth response (0xF1)", e.message, "auth"); return "broken"; }
+
+    const sig = resp.slice(0, 256), serial = resp.slice(256, 272), n = resp.slice(272, 528), e = resp.slice(528, 784), caSig = resp.slice(784, 1040);
+    log("Serial:", hex(serial), "\nN:", hex(n, 32), "\nE:", hex(stripZeros(e)), "\nSig:", hex(sig, 32));
+    if (n.every(b => b === 0) || sig.every(b => b === 0)) { addResult("FAIL", "Auth response is empty", "The controller pretends to support auth but returns zeros.", "auth"); return "broken"; }
+
+    let key;
+    try {
+      key = await crypto.subtle.importKey("jwk", { kty: "RSA", n: b64url(stripZeros(n)), e: b64url(stripZeros(e)), ext: true },
+        { name: "RSA-PSS", hash: "SHA-256" }, false, ["verify"]);
+    } catch (err) { addResult("FAIL", "Controller sent an invalid public key", err.message, "auth"); return "broken"; }
+    for (const saltLength of [32, 222, 20, 0]) {
+      try {
+        if (await crypto.subtle.verify({ name: "RSA-PSS", saltLength }, key, sig, nonce)) {
+          info.keySerial = toHex(serial).toUpperCase();
+          evidence = { scheme: "RSASSA-PSS, SHA-256, MGF1-SHA-256", saltLength, nonce: toHex(nonce), signature: toHex(sig),
+                       keySerial: info.keySerial, modulus: toHex(n), exponent: toHex(stripZeros(e)), caSignature: toHex(caSig) };
+          addResult("PASS", "Signed our random challenge with a valid 2048-bit RSA key", `This proves a real PS4 security chip is present. Key serial: ${info.keySerial}`, "auth");
+          return "verified";
+        }
+      } catch (_) {}
+    }
+    addResult("FAIL", "Signature check failed", "The controller answered, but its signature doesn't match our challenge.", "auth");
+    return "badsig";
+  }
+
+  // =====================================================================
+  //  AUTOMATIC CHECKS: DualSense (clone checks from DualShock Tools, MIT)
+  // =====================================================================
+  let ds5Flags = { fwlen: null, year: null, finetune: null };
+  async function checkFirmwareDS5() {
+    try {
+      const d = await withTimeout(getFeature(0x20), 2000, "0x20");
+      log("0x20:", hex(d));
+      const dateStr = decodeStr(d.slice(0, 11)), timeStr = decodeStr(d.slice(11, 19));
+      const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
+      const hwinfo = d.length >= 27 ? dv.getUint32(23, true) : 0, fw = d.length >= 31 ? dv.getUint32(27, true) : 0;
+      const year = parseInt(dateStr.slice(-4), 10);
+      const dateOk = /^[A-Z][a-z]{2}\s+\d{1,2}\s+20\d\d$/.test(dateStr);
+      info.firmware = `${dateStr} ${timeStr}, HW 0x${hwinfo.toString(16)}, FW 0x${fw.toString(16)}`;
+      addResult(dateOk ? "PASS" : "WARN", dateOk ? "Firmware info report looks normal" : "Firmware info report is malformed", `Build date ${info.firmware}`, "fw");
+      if (transport === "usb") {
+        ds5Flags.fwlen = d.length === 63;
+        addResult(ds5Flags.fwlen ? "PASS" : "FAIL", ds5Flags.fwlen ? "Firmware report is the exact genuine size (64 bytes)" : `Firmware report is ${d.length + 1} bytes, not 64`,
+          ds5Flags.fwlen ? "" : "DualShock Tools flags this as a clone.", "fwlen");
+      }
+      ds5Flags.year = !(year > new Date().getFullYear());
+      if (!ds5Flags.year) addResult("FAIL", `Firmware build date is in the future (${year})`, "A genuine controller can't have this. Known DualSense clones report dates like 2034.", "fwyear");
+      reportBoard(boardDS5(hwinfo), (hwinfo >> 8) & 0xff, "DualSense (BDM-010 to BDM-060)");
+    } catch (e) {
+      ds5Flags.fwlen = transport === "bt" ? null : false;
+      if (transport === "bt") addResult("WARN", "Firmware info not readable over Bluetooth", "Plug in with USB to check this. " + e.message, "fw");
+      else addResult("FAIL", "Firmware info report (0x20) not supported", "Genuine DualSense controllers always answer this. " + e.message, "fw");
+    }
+  }
+
+  // Every genuine DualSense answers the stick finetune (calibration) read query; clones don't.
+  async function checkFinetuneDS5() {
+    if (transport !== "usb") return;
+    try {
+      await withTimeout(device.sendFeatureReport(0x80, new Uint8Array([12, 2])), 1000, "0x80");
+      await sleep(100);
+      const d = await withTimeout(getFeature(0x81), 1000, "0x81");
+      log("0x81:", hex(d));
+      ds5Flags.finetune = d[0] === 12 && (d[1] === 2 || d[1] === 4) && d[2] === 2;
+      addResult(ds5Flags.finetune ? "PASS" : "FAIL", ds5Flags.finetune ? "Answers Sony's stick-calibration query" : "Gave a wrong answer to Sony's stick-calibration query",
+        "DualShock Tools' DualSense clone check: every genuine controller answers this, clones don't. (Read-only: nothing is changed.)", "finetune");
+    } catch (e) {
+      ds5Flags.finetune = false;
+      addResult("FAIL", "Doesn't answer Sony's stick-calibration query", "DualShock Tools treats this as a clone. " + e.message, "finetune");
+    }
+  }
+
+  // =====================================================================
+  //  AUTOMATIC CHECKS: shared
+  // =====================================================================
+  async function checkCalibration() {
+    // DS4 USB = 0x02, DS4 Bluetooth and DualSense = 0x05
+    const calId = isDS5() || transport === "bt" ? 0x05 : 0x02;
+    try {
+      const d = await withTimeout(getFeature(calId), 2000, "calibration");
+      log(`0x${calId.toString(16)}:`, hex(d));
+      if (d.length < 34) throw new Error("report too short (" + d.length + " bytes)");
+      const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
+      const s = i => dv.getInt16(i, true);
+      // DS4 over Bluetooth lists all "plus" values then all "minus"; everything else interleaves them per axis
+      const gyro = !isDS5() && transport === "bt"
+        ? { pp: s(6), yp: s(8), rp: s(10), pm: s(12), ym: s(14), rm: s(16) }
+        : { pp: s(6), pm: s(8), yp: s(10), ym: s(12), rp: s(14), rm: s(16) };
+      const acc = { xp: s(22), xm: s(24), yp: s(26), ym: s(28), zp: s(30), zm: s(32) };
+      const blank = d.slice(0, 34).every(b => b === 0) || d.slice(0, 34).every(b => b === 0xFF);
+      const gyroOk = gyro.pp > 0 && gyro.pm < 0 && gyro.yp > 0 && gyro.ym < 0 && gyro.rp > 0 && gyro.rm < 0;
+      const accOk = [acc.xp, acc.yp, acc.zp].every(v => v > 4000 && v < 12000) && [acc.xm, acc.ym, acc.zm].every(v => v < -4000 && v > -12000);
+      const detail = `gyro ± ${gyro.pp}/${gyro.pm}, ${gyro.yp}/${gyro.ym}, ${gyro.rp}/${gyro.rm}; accel ± ${acc.xp}/${acc.xm}, ${acc.yp}/${acc.ym}, ${acc.zp}/${acc.zm}`;
+      // Genuine controllers are measured one by one at the factory, so the values always differ slightly.
+      // Identical round numbers on every axis are a generic default, which third-party controllers and clones use.
+      const g6 = [gyro.pp, gyro.pm, gyro.yp, gyro.ym, gyro.rp, gyro.rm].map(Math.abs), a6 = [acc.xp, acc.xm, acc.yp, acc.ym, acc.zp, acc.zm].map(Math.abs);
+      const generic = !blank && (g6.every(v => v === g6[0]) || a6.every(v => v === 8192));
+      if (blank) addResult("FAIL", "Sensor calibration data is blank", "Genuine controllers ship with factory calibration. " + detail, "cal");
+      else if (generic) addResult("FAIL", "Sensor calibration is a generic default, not factory-measured",
+        `Every axis has the same round value. Genuine Sony controllers are calibrated one by one, so their values always differ slightly. Third-party controllers and clones use defaults like this. ${detail}`, "cal");
+      else if (gyroOk && accOk) addResult("PASS", "Factory sensor calibration looks plausible", detail, "cal");
+      else addResult("WARN", "Sensor calibration values look unusual", detail, "cal");
+    } catch (e) {
+      addResult("FAIL", `Sensor calibration report (0x${calId.toString(16)}) not supported`, e.message, "cal");
+    }
+  }
+
+  const btAddr = { mac: "", host: "" };
+  function renderBtInfo() {
+    $("btInfo").innerHTML = `Connected over <b>${transport === "bt" ? "Bluetooth" : "USB"}</b>.` +
+      (btAddr.mac ? ` Controller address <span class="mono">${btAddr.mac}</span>.` : "") +
+      (btAddr.host ? ` Paired with <span class="mono">${btAddr.host}</span>.` : "");
+  }
+  async function checkMac() {
+    // DS4: 0x12 (USB only) = controller address, 3 unknown bytes, paired host address. DualSense: 0x09 = controller address.
+    if (!isDS5() && transport === "bt") {
+      addResult("INFO", "Connected over Bluetooth", "Plug in with USB to read the controller's Bluetooth address and what it's paired with.", "mac");
+      renderBtInfo(); return;
+    }
+    const id = isDS5() ? 0x09 : 0x12;
+    try {
+      const d = await withTimeout(getFeature(id), 2000, "0x" + id.toString(16));
+      log(`0x${id.toString(16)}:`, hex(d));
+      const raw = d.slice(0, 6);
+      btAddr.mac = blankBytes(raw) ? "" : macFmt(raw);
+      if (!isDS5()) { const hostRaw = d.slice(9, 15); btAddr.host = blankBytes(hostRaw) ? "" : macFmt(hostRaw); }
+      const top = raw[5];
+      const pairTxt = isDS5() ? "" : btAddr.host ? ` · paired with ${btAddr.host}` : " · not paired with any device yet";
+      if (blankBytes(raw)) addResult("WARN", "Controller Bluetooth address is blank", "Real controllers have a unique, factory-set address.", "mac");
+      else if (top & 0x03) addResult("WARN", "Controller Bluetooth address isn't a registered manufacturer address", `${btAddr.mac}: it's ${top & 0x01 ? "a multicast" : "a locally assigned"} address. Real controllers use a manufacturer prefix. Some clones make one up.`, "mac");
+      else addResult("INFO", "Controller Bluetooth address", btAddr.mac + pairTxt, "mac");
+    } catch (e) {
+      addResult("WARN", `Couldn't read the Bluetooth address (0x${id.toString(16)})`, e.message, "mac");
+    }
+    renderBtInfo();
+  }
+
+  async function checkInputStream() {
+    const r0 = S.reports, ts0 = S.tsChanges, c0 = S.counterChanges, t0 = performance.now();
+    await sleep(2000);
+    const n = S.reports - r0, secs = (performance.now() - t0) / 1000, hz = Math.round(n / secs);
+    if (n === 0) {
+      addResult("FAIL", "Controller isn't sending input reports", "Quit Steam and DS4Windows, then replug the controller.", "rate");
+      return;
+    }
+    const iv = []; const tt = S.times.slice(-Math.min(n, S.times.length));
+    for (let i = 1; i < tt.length; i++) iv.push(tt[i] - tt[i - 1]);
+    const mean = iv.reduce((a, b) => a + b, 0) / (iv.length || 1);
+    const jitter = Math.sqrt(iv.reduce((a, b) => a + (b - mean) ** 2, 0) / (iv.length || 1));
+    const ms = (1000 / hz).toFixed(1);
+    if (transport === "bt") {
+      addResult(hz >= 100 ? "PASS" : "WARN", `Bluetooth report rate ${hz} Hz (one update every ${ms} ms)`,
+        `${hz < 60 ? "That's slow enough to add noticeable input lag. " : ""}Timing jitter ${jitter.toFixed(2)} ms. Wireless is naturally less even than USB.`, "rate");
+      setScore("resp", "rate", lin(hz, 120, 30));
+      setScore("resp", "jitter", lin(jitter, 4, 20));
+    } else {
+      if (hz >= 200 && hz <= 1100) addResult("PASS", `USB report rate ${hz} Hz (one update every ${ms} ms)`, `A genuine ${padName()} reports at about 250 Hz. Timing jitter ${jitter.toFixed(2)} ms.`, "rate");
+      else addResult("WARN", `Unusual USB report rate: ${hz} Hz (one update every ${ms} ms)`, `A genuine ${padName()} reports at about 250 Hz. Many clones run at 125 Hz, which adds input lag. Timing jitter ${jitter.toFixed(2)} ms.`, "rate");
+      setScore("resp", "rate", lin(hz, 240, 60));
+      setScore("resp", "jitter", lin(jitter, 1.5, 8));
+    }
+    const wantLen = LAYOUT[devType].len[transport];
+    if (transport === "bt" && S.len > wantLen)
+      // Windows pads Bluetooth reports to the largest size in the controller's descriptor (547 bytes for PS4 controllers)
+      addResult("PASS", "Input report has the standard Bluetooth layout", `${S.len + 1} bytes as delivered by the operating system, which pads Bluetooth updates; the controller's own part is ${wantLen + 1} bytes.`, "len");
+    else addResult(S.len === wantLen ? "PASS" : "WARN", S.len === wantLen ? `Input report has the standard ${wantLen + 1}-byte layout` : `Input report length is ${S.len + 1} bytes (expected ${wantLen + 1})`, "", "len");
+    const tsCh = S.tsChanges - ts0, cCh = S.counterChanges - c0;
+    addResult(tsCh > n * 0.5 ? "PASS" : "FAIL", tsCh > n * 0.5 ? "Internal sensor timestamp is ticking" : "Internal sensor timestamp is frozen",
+      tsCh > n * 0.5 ? "" : "Genuine controllers stamp every report. Clones often leave this at zero.", "ts");
+    addResult(cCh > n * 0.5 ? "PASS" : "WARN", cCh > n * 0.5 ? "Report sequence counter is incrementing" : "Report sequence counter isn't incrementing", "", "ctr");
+    addResult("INFO", "Battery / power", `~${batteryPct()}%, ${S.cable ? (S.full ? "plugged in, full" : "plugged in, charging") : "on battery"} (${S.batRaw})`, "bat");
+  }
+
+  // =====================================================================
+  //  VERDICT
+  // =====================================================================
+  let authResult = null;
+  // Hardware details that never occur on a genuine Sony controller (they work over Bluetooth too)
+  const isNotSony = () => results.get("genmatch")?.status === "FAIL" || (results.get("cal")?.status === "FAIL" && /generic/.test(results.get("cal").name));
+  function updateVerdict() {
+    if (!authResult) return;
+    const vals = [...results.values()];
+    const fails = vals.filter(r => r.status === "FAIL").length;
+    const warns = vals.filter(r => r.status === "WARN").length;
+    const extra = ` <span class="detail">(${fails} failed, ${warns} warnings across all checks so far)</span>`;
+    const V = {
+      verified: fails === 0
+        ? ["ok", "Genuine: Sony security chip verified", "The controller signed a random challenge with a real PS4 authentication key. Use the live tests below to check the sticks, buttons and the rest of the hardware."]
+        : ["warn", "Security chip verified, with odd results", "The authentication handshake passed, which is a strong sign the controller is genuine. Some other checks failed, though. That could mean worn or broken parts, a repair, or a replaced board."],
+      "ds5-ok": fails === 0
+        ? ["ok", "Likely genuine: passed the DualSense clone checks", "It passed every DualSense clone check (firmware report, build date and Sony's calibration query). There's no public way to run the PS5 security handshake, so this is a strong sign rather than proof."]
+        : ["warn", "Passed the DualSense clone checks, with odd results", "The main DualSense clone checks passed, but some other checks failed. That could mean worn or broken parts, or a repair."],
+      "ds5-clone": ["bad", "Likely counterfeit", "It failed DualShock Tools' DualSense clone checks, which every genuine DualSense passes. (If Steam or DS4Windows is running, quit it, replug the controller and test again.)"],
+      bt: ["warn", "Connected over Bluetooth: authenticity not checked", "The real-or-fake checks need a USB cable. Plug in and click Connect &amp; test again. Over Bluetooth you can still test the signal, battery, sticks and everything else."],
+      unsupported: ["bad", "Likely counterfeit", "There's no working PS4 security chip. Every genuine DualShock 4 has one. (If Steam or DS4Windows is running, quit it, replug the controller and test again.)"],
+    };
+    V.notsony = ["bad", "Not a genuine Sony controller",
+      "Its hardware doesn't match a real Sony controller (see the failed checks below), even though it uses Sony's ID. That's expected for third-party controllers like the Gioteck VX4, which copy Sony's ID to work with a PS4. If it was sold as a genuine Sony controller, it's a clone."];
+    let vkey = authResult;
+    if (isNotSony() && (vkey === "bt" || vkey === "ds5-ok")) vkey = "notsony";
+    const [kind, title, text] = V[vkey] || ["bad", "Suspicious: authentication failed", "The controller tries to speak the PS4 auth protocol but fails it. Unplug it, plug it back in, and retest. If it fails again, treat it as a clone."];
+    setVerdict(kind, title, text + extra);
+    $("shareCard").classList.remove("hidden");
+    recordHistory();
+  }
+
+  // =====================================================================
+  //  LIVE TESTS
+  // =====================================================================
+  $("btnDrift").onclick = async () => {
+    $("btnDrift").disabled = true;
+    const samples = [], tStart = performance.now();
+    // Skip the first half second so a stick that's still settling after you let go isn't counted as jitter
+    recorder = s => { if (performance.now() - tStart > 500) samples.push([s.lx, s.ly, s.rx, s.ry]); };
+    for (let i = 3; i > 0; i--) { $("driftStatus").textContent = `Hands off… ${i}`; await sleep(1000); }
+    recorder = null;
+    $("btnDrift").disabled = false;
+    if (!samples.length) { $("driftStatus").textContent = "No data received."; return; }
+    const stat = (ix, iy) => {
+      let sx = 0, sy = 0, maxR = 0, mnx = 255, mxx = 0, mny = 255, mxy = 0;
+      for (const p of samples) {
+        sx += p[ix]; sy += p[iy];
+        mnx = Math.min(mnx, p[ix]); mxx = Math.max(mxx, p[ix]); mny = Math.min(mny, p[iy]); mxy = Math.max(mxy, p[iy]);
+        const [nx, ny] = norm(p[ix], p[iy]);
+        maxR = Math.max(maxR, Math.hypot(nx, ny));
+      }
+      return { ax: sx / samples.length, ay: sy / samples.length, maxR, pct: Math.ceil(maxR * 100), noise: Math.max(mxx - mnx, mxy - mny) };
+    };
+    const Ls = stat(0, 1), Rs = stat(2, 3);
+    dz.L = Ls.maxR; dz.R = Rs.maxR; dzPct.L = Ls.pct; dzPct.R = Rs.pct;
+    const grade = pct => pct <= 6 ? ["PASS", "No noticeable drift"] : pct <= 12 ? ["WARN", "Slight drift"] : ["FAIL", "Significant drift"];
+    for (const [name, st, key, side] of [["Left", Ls, "dzL", "L"], ["Right", Rs, "dzR", "R"]]) {
+      const [status, label] = grade(st.pct);
+      addResult(status, `${name} stick: ${label}`,
+        `Rests at (${st.ax.toFixed(1)}, ${st.ay.toFixed(1)}); center is 127.5. Deadzone needed to hide drift: ~${st.pct}%. ` +
+        `Jitter while untouched: ${st.noise} step${st.noise === 1 ? "" : "s"}${st.noise <= 2 ? " (steady)" : st.noise <= 6 ? " (a bit noisy)" : " (very noisy)"}. Sticks in good condition need under 6%.`, key);
+      setScore("sticks", "drift" + side, lin(st.pct, 5, 20));
+      setScore("sticks", "noise" + side, lin(st.noise, 2, 10));
+    }
+    $("driftStatus").textContent = `Deadzone needed: Left ${Ls.pct}%, Right ${Rs.pct}%`;
+    renderStickReport();
+  };
+
+  const rangeStats = { L: null, R: null };
+  $("btnRange").onclick = async () => {
+    $("btnRange").disabled = true;
+    const bins = n => ({ r: new Float32Array(n), minX: 255, maxX: 0, minY: 255, maxY: 0, xs: new Set(), ys: new Set() });
+    const NB = 32, BL = bins(NB), BR = bins(NB);
+    const feed = (B, x, y) => {
+      B.minX = Math.min(B.minX, x); B.maxX = Math.max(B.maxX, x); B.minY = Math.min(B.minY, y); B.maxY = Math.max(B.maxY, y);
+      B.xs.add(x); B.ys.add(y);
+      const [nx, ny] = norm(x, y), r = Math.hypot(nx, ny);
+      if (r < 0.5) return;
+      const a = (Math.atan2(ny, nx) + Math.PI) / (2 * Math.PI);
+      const i = Math.min(NB - 1, Math.floor(a * NB));
+      B.r[i] = Math.max(B.r[i], r);
+    };
+    recorder = s => { feed(BL, s.lx, s.ly); feed(BR, s.rx, s.ry); };
+    for (let i = 8; i > 0; i--) { $("rangeStatus").textContent = `Rotate both sticks around the edge… ${i}`; await sleep(1000); }
+    recorder = null;
+    $("btnRange").disabled = false;
+    $("rangeStatus").textContent = "";
+
+    const evalStick = (B, name, key) => {
+      const filled = Array.from(B.r).filter(v => v > 0);
+      if (filled.length < NB * 0.6) {
+        addResult("WARN", `${name} stick: range test incomplete`, "Rotate the stick in full circles around the edge and try again.", key);
+        return null;
+      }
+      const avg = filled.reduce((a, b) => a + b, 0) / filled.length;
+      const at = deg => B.r[Math.floor(((deg + 180) / 360) * NB) % NB];
+      const card = [0, 90, -90, 180].map(at).filter(v => v > 0), diag = [45, 135, -45, -135].map(at).filter(v => v > 0);
+      const ratio = (diag.reduce((a, b) => a + b, 0) / (diag.length || 1)) / (card.reduce((a, b) => a + b, 0) / (card.length || 1));
+      const fullRange = B.minX <= 8 && B.maxX >= 247 && B.minY <= 8 && B.maxY >= 247;
+      const res = Math.min(B.xs.size, B.ys.size);
+      const circErr = filled.reduce((a, r) => a + Math.abs(r - avg), 0) / filled.length / avg;
+      const reach = ((127.5 - B.minX) + (B.maxX - 127.5) + (127.5 - B.minY) + (B.maxY - 127.5)) / (4 * 127.5);
+      const side = key.slice(-1);
+      setScore("sticks", "range" + side, lin(reach, 0.97, 0.7));
+      setScore("sticks", "circ" + side, lin(circErr, 0.05, 0.2));
+      setScore("sticks", "res" + side, lin(res, 200, 60));
+      const msgs = [`X ${B.minX}–${B.maxX}, Y ${B.minY}–${B.maxY}`, `outer circle avg ${(avg * 100).toFixed(0)}%`, `circularity error ${(circErr * 100).toFixed(1)}% (under 5% is very good)`, `diagonal/cardinal ratio ${ratio.toFixed(2)}`, `${res} distinct positions per axis`];
+      let status = "PASS", label = "Full range, round outer edge";
+      if (!fullRange) { status = "WARN"; label = "Doesn't reach full range (outer deadzone)"; }
+      if (ratio > 1.25) { status = "WARN"; label = (fullRange ? "" : "Limited range and ") + "Square-shaped output (unusual for a genuine controller)"; }
+      if (res < 100) { status = "WARN"; label = "Low stick resolution"; }
+      addResult(status, `${name} stick: ${label}`, msgs.join(" · "), key);
+      return { fullRange, ratio, avg, circErr, reach };
+    };
+    rangeStats.L = evalStick(BL, "Left", "rgL");
+    rangeStats.R = evalStick(BR, "Right", "rgR");
+    renderStickReport();
+  };
+  $("btnClearTrace").onclick = () => { traceL.length = 0; traceR.length = 0; dz.L = dz.R = 0; };
+
+  function renderStickReport() {
+    const el = $("stickReport");
+    const parts = [];
+    if (dz.L || dz.R) parts.push(`<b>Recommended inner deadzone:</b> Left ${Math.ceil(dz.L * 100) + 2}%, Right ${Math.ceil(dz.R * 100) + 2}% (resting drift plus a 2% margin). Set this in your game or in Steam Input.`);
+    if (rangeStats.L || rangeStats.R) parts.push(`<b>Outer edge:</b> ${["L", "R"].filter(k => rangeStats[k]).map(k => `${k === "L" ? "Left" : "Right"} ${rangeStats[k].fullRange ? "reaches full range" : "stops short of full range"}`).join(", ")}.`);
+    el.innerHTML = parts.join("<br>");
+    el.classList.toggle("hidden", !parts.length);
+    renderAimSettings();
+    updateVerdict();
+  }
+
+  // Buttons (Share is called Create on the DualSense, which also has a Mute button)
+  function allButtons() {
+    const base = ["Up", "Down", "Left", "Right", "Triangle", "Circle", "Cross", "Square", "L1", "R1", "L3", "R3", "Share", "Options", "PS", "Touchpad click"];
+    if (isDS5()) base.push("Mute");
+    return base.map(k => ({ key: k, label: k === "Share" && isDS5() ? "Create" : k }));
+  }
+  function renderButtonGrid() {
+    const list = allButtons();
+    $("btngrid").innerHTML = list.map(b => `<div data-b="${b.key}">${b.label}</div>`).join("");
+    $("btnIntro").textContent = `Press every button once. Each turns green when it registers. A genuine ${padName()} registers all ${list.length}, including the touchpad click and the PS button. L2 and R2 are on the Triggers tab.`;
+  }
+  renderButtonGrid();
+  $("btnBtnsDone").onclick = () => {
+    const list = allButtons();
+    const missing = list.filter(b => !seenBtn.has(b.key)).map(b => b.label);
+    setScore("buttons", "all", (list.length - missing.length) / list.length);
+    if (!missing.length) addResult("PASS", "All buttons register", "", "btns");
+    else addResult("WARN", `${missing.length} button(s) never registered`, missing.join(", ") + ". Press them and record again. A missing PS or touchpad click is common on clones.", "btns");
+    updateVerdict();
+  };
+
+  $("btnTrigDone").onclick = () => {
+    for (const [name, set, key] of [["L2", l2Levels, "l2"], ["R2", r2Levels, "r2"]]) {
+      const n = set.size, max = Math.max(...set), cur = name === "L2" ? S.l2 : S.r2;
+      if (n > 1) {
+        // Level count depends on how slowly you squeeze, so 40+ distinct levels already proves a fully analog trigger
+        const lvl = n <= 4 ? 0 : lin(n, 40, 5);
+        setScore("triggers", key, lvl * 0.6 + lin(max, 250, 150) * 0.3 + (cur <= 3 ? 0.1 : 0));
+      }
+      if (n > 1) trigRest[name] = cur;
+      if (n > 1 && cur > 3) addResult("WARN", `${name} doesn't return to zero (reads ${cur} at rest)`, "Let go of the trigger fully before recording. If it still reads above 0, the trigger is sticking or worn.", key + "rest");
+      if (n <= 1) addResult("WARN", `${name} trigger not pressed`, "Squeeze it slowly and record again.", key);
+      else if (n <= 4) addResult("FAIL", `${name} trigger is digital (${n} levels)`, "Genuine PlayStation triggers are analog. This is a strong clone sign.", key);
+      else if (n < 40) addResult("WARN", `${name} trigger has only ${n} levels`, "Press slowly through the full travel and record again.", key);
+      else addResult(max >= 250 ? "PASS" : "WARN", max >= 250 ? `${name} trigger is analog (${n} levels)` : `${name} trigger is analog but tops out at ${max}`, "", key);
+    }
+    renderAimSettings();   // the trigger deadzone feeds the game settings
+    updateVerdict();
+  };
+
+  $("btnMotion").onclick = async () => {
+    $("btnMotion").disabled = true;
+    const gMin = [1e9, 1e9, 1e9], gMax = [-1e9, -1e9, -1e9], aMin = [1e9, 1e9, 1e9], aMax = [-1e9, -1e9, -1e9];
+    let touched = false, n = 0;
+    const range = (mx, mn) => Math.max(...mx.map((v, i) => v - mn[i]));
+    recorder = s => {
+      n++;
+      for (let i = 0; i < 3; i++) {
+        gMin[i] = Math.min(gMin[i], s.gyro[i]); gMax[i] = Math.max(gMax[i], s.gyro[i]);
+        aMin[i] = Math.min(aMin[i], s.acc[i]); aMax[i] = Math.max(aMax[i], s.acc[i]);
+      }
+      if (s.touch) touched = true;
+      $("mGyro").style.width = Math.min(100, range(gMax, gMin) / 80) + "%";
+      $("mAcc").style.width = Math.min(100, range(aMax, aMin) / 40) + "%";
+    };
+    for (let i = 8; i > 0; i--) { $("motionStatus").textContent = `Move it and touch the touchpad… ${i}`; await sleep(1000); }
+    recorder = null;
+    $("motionStatus").textContent = "";
+    $("btnMotion").disabled = false;
+    if (!n) { addResult("WARN", "No input reports received", "", "gyro"); return; }
+    const gr = range(gMax, gMin), ar = range(aMax, aMin);
+    setScore("motion", "gyro", lin(gr, 3000, 300));
+    setScore("motion", "acc", lin(ar, 2000, 200));
+    setScore("motion", "touch", touched ? 1 : 0);
+    addResult(gr > 2000 ? "PASS" : "FAIL", gr > 2000 ? "Gyroscope responds to movement" : "Gyroscope barely moved", `range ${gr}. Many cheap clones have no gyro.`, "gyro");
+    addResult(ar > 1000 ? "PASS" : "FAIL", ar > 1000 ? "Accelerometer responds to movement" : "Accelerometer barely moved", `range ${ar}`, "acc");
+    addResult(touched ? "PASS" : "WARN", touched ? "Touchpad works" : "Touchpad wasn't detected", touched ? "" : "Try again and swipe the touchpad during the test.", "touch");
+    updateVerdict();
+  };
+
+  // ---------- Lightbar & rumble output ----------
+  let ds5Seq = 0, ds5LightsReleased = false;
+  async function sendDS5(common) {
+    if (transport === "bt") {
+      // Bluetooth 0x31: sequence tag, 0x10 tag, 47-byte common block, CRC32 over 0xA2 + first 74 bytes
+      const rep = new Uint8Array(78);
+      rep[0] = 0x31; rep[1] = (ds5Seq << 4) & 0xF0; rep[2] = 0x10; ds5Seq = (ds5Seq + 1) & 0x0F;
+      rep.set(common, 3);
+      const crcBuf = new Uint8Array(75); crcBuf[0] = 0xA2; crcBuf.set(rep.subarray(0, 74), 1);
+      new DataView(rep.buffer).setUint32(74, crc32(crcBuf), true);
+      await device.sendReport(0x31, rep.subarray(1));
+    } else {
+      await device.sendReport(0x02, common);
+    }
+  }
+  async function sendOutput({ weak = 0, strong = 0, r = 0, g = 0, b = 0 }) {
+    if (isDS5()) {
+      if (!ds5LightsReleased) {   // release the lightbar from its start-up animation (as the Linux driver does)
+        const rel = new Uint8Array(47); rel[38] = 0x02; rel[41] = 0x02;
+        await sendDS5(rel); ds5LightsReleased = true; await sleep(50);
+      }
+      const c = new Uint8Array(47);
+      c[0] = 0x03; c[1] = 0x04;          // rumble + lightbar colour
+      c[2] = weak; c[3] = strong; c[44] = r; c[45] = g; c[46] = b;
+      return sendDS5(c);
+    }
+    if (transport === "bt") {
+      // DS4 Bluetooth output report 0x11: 78 bytes, CRC32 over 0xA2 + first 74 bytes
+      const rep = new Uint8Array(78);
+      rep[0] = 0x11; rep[1] = 0xC4; rep[3] = 0x07;
+      rep[6] = weak; rep[7] = strong; rep[8] = r; rep[9] = g; rep[10] = b;
+      const crcBuf = new Uint8Array(75); crcBuf[0] = 0xA2; crcBuf.set(rep.subarray(0, 74), 1);
+      new DataView(rep.buffer).setUint32(74, crc32(crcBuf), true);
+      await device.sendReport(0x11, rep.subarray(1));
+      return;
+    }
+    const d = new Uint8Array(31);
+    d[0] = 0x07; d[1] = 0x04;  // enable rumble + lightbar + flash
+    d[3] = weak; d[4] = strong; d[5] = r; d[6] = g; d[7] = b;
+    await device.sendReport(0x05, d);
+  }
+  function ask(text, options) {
+    return new Promise(resolve => {
+      $("lightQ").classList.remove("hidden");
+      $("lightQText").innerHTML = text;
+      $("lightQBtns").innerHTML = "";
+      for (const o of options) {
+        const b = document.createElement("button");
+        b.textContent = o; b.className = "secondary";
+        b.onclick = () => resolve(o);
+        $("lightQBtns").appendChild(b);
+      }
+    });
+  }
+  $("btnLights").onclick = async () => {
+    $("btnLights").disabled = true;
+    $("lightStatus").textContent = "";
+    try {
+      const colors = [["Red", { r: 255 }], ["Green", { g: 255 }], ["Blue", { b: 255 }]];
+      for (let i = colors.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [colors[i], colors[j]] = [colors[j], colors[i]]; }
+      const pairs = [];
+      for (let i = 0; i < colors.length; i++) {
+        const [sent, cfg] = colors[i];
+        await sendOutput(cfg);
+        const seen = await ask(`Colour ${i + 1} of 3: what colour is the lightbar now?`, ["Red", "Green", "Blue", "White", "Other colour", "Off"]);
+        pairs.push([sent, seen]);
+        setScore("lights", "c" + sent, seen === sent ? 1 : 0);
+        log(`Lightbar: sent ${sent}, user saw ${seen}`);
+      }
+      const wrong = pairs.filter(([s, v]) => s !== v);
+      const table = pairs.map(([s, v]) => `sent ${s} → you saw ${v}`).join("; ");
+      const allOff = pairs.every(([, v]) => v === "Off");
+      if (allOff && isNotSony()) {
+        // Third-party controllers like the Gioteck VX4 have a small power LED instead of a lightbar: not a fault
+        for (const [s] of pairs) delete (scores.lights || {})["c" + s];
+        renderScore();
+        addResult("INFO", "No lightbar", "No colour lit up. That's normal for third-party controllers like the Gioteck VX4, which only have a small power LED, so it doesn't count against the score.", "lightc");
+      } else if (allOff) addResult("FAIL", "Lightbar doesn't light up", `${table}. A genuine controller's lightbar always shows the colour it's sent, so the LED or its cable is probably broken.`, "lightc");
+      else if (!wrong.length) addResult("PASS", "Lightbar shows the correct red, green and blue", table, "lightc");
+      else addResult("FAIL", `Lightbar showed the wrong colour ${wrong.length} of 3 times`,
+        `${table}. A genuine controller shows exactly the colour it's sent. Swapped colours usually mean a clone that only partly copies Sony's command format (or a replaced LED board).`, "lightc");
+
+      const motors = [["left", "heavy", { strong: 255 }, "rumL"], ["right", "light", { weak: 255 }, "rumR"]];
+      for (let i = 0; i < motors.length; i++) {
+        const [side, kind, cfg, key] = motors[i];
+        await ask(`Rumble ${i + 1} of 2: hold the controller in both hands, then click Start.`, ["Start"]);
+        $("lightQText").textContent = "Rumbling…"; $("lightQBtns").innerHTML = "";
+        await sendOutput({ ...cfg, b: 64 });
+        await sleep(1500);
+        await sendOutput({ b: 64 });
+        const felt = await ask("Which side rumbled?", ["Left", "Right", "Both", "Neither"]);
+        const want = side === "left" ? "Left" : "Right";
+        setScore("lights", key, felt === want ? 1 : felt === "Neither" ? 0 : 0.5);
+        if (felt === want) addResult("PASS", `${want} (${kind}) rumble motor works`, "", key);
+        else if (felt === "Neither") addResult("FAIL", `${want} (${kind}) rumble motor didn't run`, "Broken or missing motor, or a clone that ignores the standard rumble command.", key);
+        else addResult("WARN", `${want} (${kind}) rumble motor: you felt ${felt.toLowerCase()}`, `Only the ${side} motor should have run. The motors may be swapped or wired wrong.`, key);
+      }
+      $("lightQ").classList.add("hidden");
+      $("lightStatus").textContent = "Done.";
+      updateVerdict();
+    } catch (e) {
+      $("lightQ").classList.add("hidden");
+      $("lightStatus").textContent = "Couldn't send: " + e.message;
+      addResult("WARN", "Lightbar/rumble command rejected", e.message, "lightc");
+    }
+    $("btnLights").disabled = false;
+  };
+  $("btnSetColor").onclick = async () => {
+    const h = $("colorPick").value;
+    try { await sendOutput({ r: parseInt(h.slice(1, 3), 16), g: parseInt(h.slice(3, 5), 16), b: parseInt(h.slice(5, 7), 16) }); }
+    catch (e) { $("lightStatus").textContent = "Couldn't send: " + e.message; }
+  };
+
+  // ---------- Battery monitor: times each 10% step while charging or draining ----------
+  let batMon = null;
+  $("btnBatMon").onclick = () => {
+    if (batMon) {
+      clearInterval(batMon.timer); batMon = null;
+      $("btnBatMon").textContent = "Start battery monitor"; $("batMonStatus").textContent = "Stopped.";
+      return;
+    }
+    if (!S.reports) { $("batMonStatus").textContent = "Connect the controller first."; return; }
+    batMon = { start: Date.now(), steps: [], last: S.batSteps, cable: S.cable, lastT: Date.now(), anchored: false };
+    batMon.timer = setInterval(batTick, 2000);
+    $("btnBatMon").textContent = "Stop monitor";
+    batTick();
+  };
+  function batTick() {
+    const m = batMon; if (!m) return;
+    const now = Date.now();
+    if (S.cable !== m.cable) {
+      Object.assign(m, { steps: [], last: S.batSteps, cable: S.cable, lastT: now, anchored: false, start: now });
+    } else if (S.batSteps !== m.last) {
+      if (m.anchored) m.steps.push({ from: m.last, to: S.batSteps, mins: (now - m.lastT) / 60000 });
+      m.anchored = true; m.last = S.batSteps; m.lastT = now;
+    }
+    const charging = S.cable, full = S.full;
+    const mins = Math.floor((now - m.start) / 60000);
+    let html = `Watching for ${mins} min while ${full ? "fully charged" : charging ? "charging" : "on battery"} · now ~${batteryPct()}%.`;
+    if (full) html += "<br>It's already full. Unplug it and connect over Bluetooth to time how fast it drains.";
+    else if (!m.steps.length) {
+      html += `<br>Waiting for the level to change twice (the first change only sets the starting point). Each 10% step takes about ${charging ? "5–15 minutes while charging" : "25–50 minutes on battery"}, so this takes a while. Leave this tab open.`;
+    } else {
+      const avg = m.steps.reduce((a, s) => a + s.mins, 0) / m.steps.length;
+      const hrs = avg * 10 / 60;
+      html += "<br>" + m.steps.map(s => `${s.from * 10}% → ${s.to * 10}%: ${s.mins.toFixed(1)} min`).join("<br>");
+      if (charging) {
+        html += `<br><b>Estimated full charge from empty: ${hrs.toFixed(1)} h</b> (a healthy controller takes about 2–3 h).`;
+        setScore("battery", "charge", lin(hrs, 3, 6));
+        addResult(hrs <= 3 ? "PASS" : "WARN", `Battery charges at ~${avg.toFixed(0)} min per 10%`, `About ${hrs.toFixed(1)} h from empty to full. Much longer than 3 h can mean a weak charging circuit or cable.`, "batcharge");
+      } else {
+        html += `<br><b>Estimated runtime on a full charge: ${hrs.toFixed(1)} h</b> (a healthy controller gets about 4–8 h).`;
+        setScore("battery", "runtime", lin(hrs, 5, 1.5));
+        addResult(hrs >= 4 ? "PASS" : hrs >= 2.5 ? "WARN" : "FAIL", `Battery drains at ~${avg.toFixed(0)} min per 10%`,
+          `About ${hrs.toFixed(1)} h on a full charge. Under 3 h usually means a worn or low-capacity battery (common in clones and old controllers).`, "batrun");
+      }
+      updateVerdict();
+    }
+    $("batLog").innerHTML = html;
+    $("batLog").classList.remove("hidden");
+    $("batMonStatus").textContent = "";
+  }
+
+  // ---------- Bluetooth signal test: dropouts = gaps > 50 ms between updates ----------
+  $("btnBtTest").onclick = async () => {
+    if (!device || transport !== "bt") { $("btStatus").textContent = "Connect over Bluetooth first (see above)."; return; }
+    $("btnBtTest").disabled = true;
+    const ts = [];
+    recorder = () => ts.push(performance.now());
+    for (let i = 15; i > 0; i--) { $("btStatus").textContent = `Move to where you play… ${i}`; await sleep(1000); }
+    recorder = null;
+    $("btnBtTest").disabled = false;
+    if (ts.length < 2) {
+      $("btStatus").textContent = "";
+      addResult("FAIL", "Bluetooth signal: no updates received", "The connection dropped completely.", "btsig");
+      setScore("resp", "btsig", 0); return;
+    }
+    const gaps = []; for (let i = 1; i < ts.length; i++) gaps.push(ts[i] - ts[i - 1]);
+    const drops = gaps.filter(g => g > 50).length, maxGap = Math.max(...gaps), hz = Math.round(ts.length / 15);
+    $("btStatus").textContent = `${drops} dropout${drops === 1 ? "" : "s"}, longest gap ${maxGap.toFixed(0)} ms`;
+    addResult(drops === 0 ? "PASS" : drops <= 3 ? "WARN" : "FAIL", `Bluetooth signal: ${drops} dropout${drops === 1 ? "" : "s"} in 15 s`,
+      `${hz} updates/s on average, longest gap ${maxGap.toFixed(0)} ms. ${drops ? "Dropouts feel like stutter. Try moving closer, or away from Wi‑Fi routers and USB 3 ports, to see if it's the controller or the room." : "Steady connection."}`, "btsig");
+    setScore("resp", "btsig", lin(drops, 0, 10));
+    updateVerdict();
+  };
+
+  $("tabs").addEventListener("click", e => {
+    const t = e.target.closest("button[data-tab]"); if (!t) return;
+    for (const b of $("tabs").children) b.classList.toggle("on", b === t);
+    for (const p of document.querySelectorAll("[data-panel]")) p.classList.toggle("hidden", p.dataset.panel !== t.dataset.tab);
+  });
+
+  // =====================================================================
+  //  AIM: precision test, trainer, recommended settings
+  // =====================================================================
+  const aimPrec = { hold: null, circle: null };
+  const trainerRuns = [];
+  const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+  const std = a => { const m = mean(a); return Math.sqrt(mean(a.map(v => (v - m) ** 2))); };
+
+  // Step 1: hold the right stick still at a small deflection
+  $("btnAimHold").onclick = async () => {
+    $("btnAimHold").disabled = true;
+    const xs = [], ys = [], t0 = performance.now();
+    recorder = s => { if (performance.now() - t0 > 500) { xs.push(s.rx); ys.push(s.ry); } };
+    for (let i = 3; i > 0; i--) { $("aimStatus").textContent = `Hold the right stick still, a quarter of the way out… ${i}`; await sleep(1000); }
+    recorder = null; $("btnAimHold").disabled = false; $("aimStatus").textContent = "";
+    if (xs.length < 10) { addResult("WARN", "Aim hold test: no data received", "", "aimHold"); return; }
+    const r = Math.hypot((mean(xs) - 127.5) / 127.5, (mean(ys) - 127.5) / 127.5);
+    if (r < 0.08) { addResult("WARN", "Aim hold test: the stick wasn't pushed", "Push the right stick about a quarter of the way out, hold it there, and try again.", "aimHold"); return; }
+    const wob = Math.max(std(xs), std(ys));
+    aimPrec.hold = { wobble: +wob.toFixed(2), deflection: Math.round(r * 100) };
+    const [status, label] = wob <= 1.5 ? ["PASS", "Right stick holds steady"] : wob <= 3 ? ["WARN", "Right stick wobbles a little when held"] : ["FAIL", "Right stick is shaky when held"];
+    addResult(status, label, `Wobble ${wob.toFixed(1)} steps (standard deviation) at ${aimPrec.hold.deflection}% deflection. Under 1.5 is steady. This includes your hand, so try again if you moved.`, "aimHold");
+    setScore("sticks", "aimHold", lin(wob, 1.5, 6));
+    renderAimSettings(); updateVerdict();
+  };
+
+  // Step 2: slow small circle; a healthy stick moves in 1-2 unit steps, a worn one jumps
+  $("btnAimCircle").onclick = async () => {
+    $("btnAimCircle").disabled = true;
+    const pts = [];
+    recorder = s => pts.push([s.rx, s.ry]);
+    for (let i = 8; i > 0; i--) { $("aimStatus").textContent = `Move the right stick slowly in a small circle… ${i}`; await sleep(1000); }
+    recorder = null; $("btnAimCircle").disabled = false; $("aimStatus").textContent = "";
+    let changes = 0, small = 0, jumps = 0, maxJump = 0, path = 0, prev = null;
+    const seen = new Set();
+    for (const [x, y] of pts) {
+      const r = Math.hypot((x - 127.5) / 127.5, (y - 127.5) / 127.5);
+      if (r < 0.08 || r > 0.7) { prev = null; continue; }     // only the zone where fine aiming happens
+      seen.add(x * 256 + y);
+      if (prev && (x !== prev[0] || y !== prev[1])) {
+        const d = Math.max(Math.abs(x - prev[0]), Math.abs(y - prev[1]));
+        changes++; path += d; if (d <= 2) small++; if (d >= 6) jumps++; maxJump = Math.max(maxJump, d);
+      }
+      prev = [x, y];
+    }
+    // judge "did they move enough" by distance travelled, so a worn stick that moves in big jumps still gets graded
+    if (path < 80 || changes < 8) { addResult("WARN", "Aim circle test: not enough movement", "Move the right stick slowly in a small circle, about a third of the way out, for the whole 8 seconds.", "aimCircle"); return; }
+    const smooth = small / changes;
+    aimPrec.circle = { smooth: Math.round(smooth * 100), jumps, maxJump, positions: seen.size };
+    const [status, label] = smooth >= 0.9 && jumps <= 2 ? ["PASS", "Right stick moves smoothly in small steps"]
+      : smooth >= 0.75 && jumps <= 8 ? ["WARN", "Right stick is slightly jumpy in small movements"] : ["FAIL", "Right stick jumps during small movements"];
+    addResult(status, label, `${aimPrec.circle.smooth}% of steps were tiny (1–2 units), ${jumps} jump${jumps === 1 ? "" : "s"} of 6+ units (biggest ${maxJump}), ${seen.size} distinct positions. Jumps make small aim corrections jerky; they usually mean a worn stick sensor.`, "aimCircle");
+    setScore("sticks", "aimSmooth", lin(smooth, 0.95, 0.6) * (jumps > 8 ? 0.5 : 1));
+    renderAimSettings(); updateVerdict();
+  };
+
+  // ---------- Aim trainer ----------
+  const TRW = 720, TRH = 360, TR_N = 10, TR_R = 22, TR_HOLD = 250, TR_TIMEOUT = 6000, TR_SPEED = 700;
+  const TR = { running: false, x: TRW / 2, y: TRH / 2, target: null, t0: 0, onSince: null, overs: 0, n: 0, total: TR_N, hits: [], timer: null, last: 0, set: null, label: "", resolve: null };
+  // Response curves: linear, standard (gentle), exponential (slow near centre), dynamic (S-shaped: slow near centre, quick mid-range)
+  const curveFn = (m, c) => c === "linear" ? m : c === "exponential" ? m * m : c === "dynamic" ? m * m * (3 - 2 * m) : Math.pow(m, 1.5);
+  const trSettings = () => ({ deadzone: +$("trDz").value, curve: $("trCurve").value, sensitivity: +$("trSens").value / 10 });
+  function stickVec(set) {
+    const x = (S.rx - 127.5) / 127.5, y = (S.ry - 127.5) / 127.5, m = Math.min(1, Math.hypot(x, y)), d = set.deadzone / 100;
+    if (m <= d || m === 0) return [0, 0];
+    const k = curveFn((m - d) / (1 - d), set.curve) / m;
+    return [x * k, y * k];
+  }
+  function trNewTarget() {
+    let tx, ty, tries = 0;
+    do { tx = 40 + Math.random() * (TRW - 80); ty = 40 + Math.random() * (TRH - 80); } while (Math.hypot(tx - TR.x, ty - TR.y) < 160 && ++tries < 50);
+    Object.assign(TR, { target: { x: tx, y: ty }, t0: performance.now(), onSince: null, overs: 0 });
+  }
+  function trDraw() {
+    const g = $("trCanvas").getContext("2d");
+    g.clearRect(0, 0, TRW, TRH);
+    if (TR.target) {
+      g.fillStyle = cssVar("--warn"); g.beginPath(); g.arc(TR.target.x, TR.target.y, TR_R, 0, Math.PI * 2); g.fill();
+      if (TR.onSince !== null) {   // hold progress ring
+        const p = Math.min(1, (performance.now() - TR.onSince) / TR_HOLD);
+        g.strokeStyle = cssVar("--ok"); g.lineWidth = 4; g.beginPath(); g.arc(TR.target.x, TR.target.y, TR_R + 6, -Math.PI / 2, -Math.PI / 2 + p * Math.PI * 2); g.stroke();
+      }
+    }
+    g.strokeStyle = cssVar("--accent"); g.lineWidth = 2;
+    g.beginPath(); g.moveTo(TR.x - 14, TR.y); g.lineTo(TR.x - 4, TR.y); g.moveTo(TR.x + 4, TR.y); g.lineTo(TR.x + 14, TR.y);
+    g.moveTo(TR.x, TR.y - 14); g.lineTo(TR.x, TR.y - 4); g.moveTo(TR.x, TR.y + 4); g.lineTo(TR.x, TR.y + 14); g.stroke();
+    g.fillStyle = cssVar("--muted"); g.font = "15px system-ui, sans-serif";
+    g.fillText(TR.running ? `${TR.label ? TR.label + " · " : ""}Target ${Math.min(TR.n + 1, TR.total)} of ${TR.total}` : "Press Start, then use the right stick", 12, 24);
+  }
+  function trTick() {
+    const now = performance.now(), dt = Math.min(0.05, (now - TR.last) / 1000); TR.last = now;
+    const [vx, vy] = stickVec(TR.set);
+    TR.x = Math.max(0, Math.min(TRW, TR.x + vx * TR_SPEED * TR.set.sensitivity * dt));
+    TR.y = Math.max(0, Math.min(TRH, TR.y + vy * TR_SPEED * TR.set.sensitivity * dt));
+    const t = TR.target;
+    if (t) {
+      if (Math.hypot(TR.x - t.x, TR.y - t.y) <= TR_R) {
+        if (TR.onSince === null) TR.onSince = now;
+        else if (now - TR.onSince >= TR_HOLD) trNext({ time: (TR.onSince - TR.t0) / 1000, overs: TR.overs, miss: false });
+      } else {
+        if (TR.onSince !== null) TR.overs++;     // slid off a target it had reached
+        TR.onSince = null;
+      }
+      if (TR.target === t && now - TR.t0 > TR_TIMEOUT) trNext({ time: TR_TIMEOUT / 1000, overs: TR.overs, miss: true });
+    }
+    trDraw();
+  }
+  function trNext(hit) {
+    TR.hits.push(hit); TR.n++;
+    $("trStatus").textContent = `${TR.label ? TR.label + ": " : ""}${TR.n} / ${TR.total}`;
+    if (TR.n >= TR.total) trFinish(); else trNewTarget();
+  }
+  function trFinish() {
+    clearInterval(TR.timer); TR.running = false; TR.target = null; trDraw();
+    const ok = TR.hits.filter(h => !h.miss), misses = TR.hits.length - ok.length;
+    const avg = ok.length ? mean(ok.map(h => h.time)) : TR_TIMEOUT / 1000;
+    const overs = TR.hits.reduce((a, h) => a + h.overs, 0);
+    const score = Math.round(100 * lin(avg, 0.8, 3) * (1 - Math.min(0.5, overs / TR.total * 0.25)) * (1 - misses / TR.total));
+    const run = { date: new Date().toISOString(), ...TR.set, targets: TR.total, avgTime: +avg.toFixed(2), overshoots: overs, misses, score, label: TR.label };
+    const done = TR.resolve; TR.resolve = null;
+    if (done) done(run);
+  }
+  // Plays one round with the given settings and resolves with the result
+  async function runTrainer(set, n = TR_N, label = "") {
+    if (TR.running) return null;
+    Object.assign(TR, { x: TRW / 2, y: TRH / 2, n: 0, hits: [], target: null, set, total: n, label });
+    for (let i = 3; i > 0; i--) { $("trStatus").textContent = `${label ? label + ": " : ""}get ready… ${i}`; trDraw(); await sleep(700); }
+    $("trStatus").textContent = `${label ? label + ": " : ""}0 / ${n}`;
+    TR.running = true; TR.last = performance.now(); trNewTarget();
+    return new Promise(res => { TR.resolve = res; TR.timer = setInterval(trTick, 16); });
+  }
+  const runSummary = r => `Score ${r.score}/100: ${r.avgTime.toFixed(2)} s per target, ${r.overshoots} overshoot${r.overshoots === 1 ? "" : "s"}, ${r.misses} miss${r.misses === 1 ? "" : "es"}.`;
+  $("btnTrain").onclick = async () => {
+    if (!S.reports) { $("trStatus").textContent = "Connect the controller first."; return; }
+    if (TR.running) return;
+    $("btnTrain").disabled = true;
+    const run = await runTrainer(trSettings(), TR_N);
+    $("btnTrain").disabled = false;
+    if (!run) return;
+    trainerRuns.push(run);
+    $("trStatus").textContent = runSummary(run);
+    renderTrainerRuns(); renderAimSettings(); recordHistory();
+  };
+  function renderTrainerRuns() {
+    if (!trainerRuns.length) { $("trResults").innerHTML = ""; return; }
+    const best = Math.max(...trainerRuns.map(r => r.score));
+    $("trResults").innerHTML = `<div class="tablewrap"><table><thead><tr><th>Run</th><th>Deadzone</th><th>Curve</th><th>Sens.</th><th>Time / target</th><th>Overshoots</th><th>Misses</th><th>Score</th></tr></thead><tbody>` +
+      trainerRuns.map((r, i) => `<tr><td>${i + 1}</td><td>${r.deadzone}%</td><td>${r.curve}</td><td>${r.sensitivity.toFixed(1)}</td><td>${r.avgTime}s</td><td>${r.overshoots}</td><td>${r.misses}</td><td>${r.score === best ? `<b>${r.score}</b>` : r.score}</td></tr>`).join("") +
+      `</tbody></table></div>`;
+  }
+  $("trDz").oninput = () => { $("trDzV").textContent = $("trDz").value + "%"; };
+  $("trSens").oninput = () => { $("trSensV").textContent = (+$("trSens").value / 10).toFixed(1); };
+  $("btnTrDz").onclick = () => {
+    const rec = aimRec();
+    if (rec.innerRight == null) { $("trStatus").textContent = "Run the drift test on the Sticks tab first."; return; }
+    $("trDz").value = rec.innerRight; $("trDz").oninput();
+  };
+
+  // ---------- Deadzones measured from the controller ----------
+  const trigRest = { L2: null, R2: null };
+  function aimRec() {
+    const innerRight = dzPct.R != null ? Math.max(2, dzPct.R + 2) : null;
+    const innerLeft = dzPct.L != null ? Math.max(2, dzPct.L + 2) : null;
+    const R = rangeStats.R;
+    const outer = R ? (R.fullRange ? 0 : Math.min(30, Math.ceil((1 - R.reach) * 100) + 2)) : null;
+    const jumpy = !!(aimPrec.circle && (aimPrec.circle.jumps > 8 || aimPrec.circle.smooth < 75));
+    const rest = Math.max(trigRest.L2 ?? -1, trigRest.R2 ?? -1);
+    const trigger = rest < 0 ? null : rest > 3 ? Math.ceil(rest / 255 * 100) + 2 : 1;
+    const bestRun = trainerRuns.length ? trainerRuns.reduce((a, b) => b.score > a.score ? b : a) : null;
+    return { innerRight: innerRight == null ? null : innerRight + (jumpy ? 2 : 0), innerLeft, outer, jumpy, trigger, triggerRest: rest < 0 ? null : rest,
+             best: bestRun ? { score: bestRun.score, deadzone: bestRun.deadzone, curve: bestRun.curve, sensitivity: bestRun.sensitivity } : null };
+  }
+  function renderAimSettings() {
+    const r = aimRec(), li = [];
+    li.push(r.innerRight != null
+      ? `<b>Right stick (aim) inner deadzone: ${r.innerRight}%</b>: your measured drift plus a 2% margin${r.jumpy ? ", plus 2% for its jumpiness" : ""}. Lower lets drift in; higher wastes the small movements the game's own aim assist responds to.`
+      : `Right stick inner deadzone: run the drift test on the <b>Sticks</b> tab first.`);
+    if (r.innerLeft != null) li.push(`<b>Left stick (movement) inner deadzone: ${r.innerLeft}%</b>.`);
+    li.push(r.outer != null
+      ? (r.outer ? `<b>Outer deadzone: ${r.outer}%</b>: your right stick stops short of full range, so this still lets you reach full turning speed.` : `<b>Outer deadzone: 0–2%</b>: your right stick reaches full range.`)
+      : `Outer deadzone: run the range test on the <b>Sticks</b> tab.`);
+    if (r.trigger != null) li.push(`<b>Trigger deadzone: ${r.trigger}%</b>: ${r.triggerRest > 3 ? `a trigger rests at ${r.triggerRest}/255, so this stops misfires.` : "your triggers rest at zero, so the minimum gives the fastest shots."}`);
+    if (r.jumpy) li.push(`<b>Your right stick is jumpy.</b> A slightly bigger deadzone hides it, but the real fix is replacing the stick module.`);
+    $("aimSettings").innerHTML = `<ul class="aimset">${li.map(x => `<li>${x}</li>`).join("")}</ul>` +
+      `<p class="detail" style="margin:8px 0 0">For sensitivity and response curve, use <b>Best settings for your game</b> below.</p>`;
+    renderFinder();
+  }
+
+  // ---------- Best settings finder: 5 popular setups per game, tested in the trainer ----------
+  const FINDER_TARGETS = 6;
+  const PRESETS = {
+    cod: {
+      name: "Call of Duty", where: "Settings → Controller. Names match Black Ops 6, Warzone and MW3.",
+      fields: [["hs", "Horizontal Stick Sensitivity", 2], ["vs", "Vertical Stick Sensitivity", 2], ["ads", "ADS Sensitivity Multiplier (Low Zoom)", 2], ["curve", "Aim Response Curve Type"], ["aa", "Aim Assist Type"]],
+      sens: ["hs", "vs"],
+      items: [
+        { name: "Balanced", style: "The most common starting point in guides: mid speed with the Dynamic curve.", v: { hs: 6, vs: 6, ads: 1.00, curve: "Dynamic", aa: "Default" } },
+        { name: "Controlled", style: "Slower with the Standard curve for steady tracking. Focusing aim assist helps you get onto targets.", v: { hs: 5, vs: 5, ads: 0.90, curve: "Standard", aa: "Focusing" } },
+        { name: "Fast & aggressive", style: "Quicker turning for close-range fights and fast movement.", v: { hs: 8, vs: 7, ads: 0.85, curve: "Dynamic", aa: "Default" } },
+        { name: "High-sens competitive", style: "Very fast turning, like many competitive players. Precision aim assist helps you stop on target.", v: { hs: 10, vs: 9, ads: 0.80, curve: "Dynamic", aa: "Precision" } },
+        { name: "Direct (linear)", style: "Linear curve: half a push turns at half speed. Predictable, good at long range.", v: { hs: 5, vs: 5, ads: 1.00, curve: "Linear", aa: "Precision" } },
+      ],
+      trainer: v => ({ sensitivity: v.hs / 6, curve: { Dynamic: "dynamic", Standard: "standard", Linear: "linear" }[v.curve] }),
+      shared: r => [
+        ["Right Stick Min Input Deadzone", r.innerRight != null ? r.innerRight : "keep yours (run the drift test)"],
+        ["Left Stick Min Input Deadzone", r.innerLeft != null ? r.innerLeft : "keep yours (run the drift test)"],
+        ["Right Stick Max Input Deadzone", r.outer != null ? 99 - r.outer : "keep yours (run the range test)"],
+        ["L2 / R2 Button Deadzone", r.trigger != null ? r.trigger : "keep yours (run the trigger test)"],
+      ],
+    },
+    fortnite: {
+      name: "Fortnite", where: "Settings → Controller → Controller Sensitivity, with \"Use Advanced Options\" turned on.",
+      fields: [["lh", "Look Horizontal Speed (%)", 0], ["lv", "Look Vertical Speed (%)", 0], ["ah", "ADS Look Horizontal Speed (%)", 0], ["av", "ADS Look Vertical Speed (%)", 0], ["curve", "Look Input Curve"]],
+      sens: ["lh", "lv", "ah", "av"],
+      items: [
+        { name: "Linear all-rounder", style: "Linear curve at a mid speed. Popular with builders and editors.", v: { lh: 46, lv: 46, ah: 13, av: 13, curve: "Linear" } },
+        { name: "Exponential aimer", style: "Exponential curve slows small movements for finer aim; speeds are raised to make up for it.", v: { lh: 54, lv: 54, ah: 15, av: 15, curve: "Exponential" } },
+        { name: "Low & precise", style: "Lower speed for steadier aim at range.", v: { lh: 38, lv: 38, ah: 10, av: 10, curve: "Linear" } },
+        { name: "Fast & aggressive", style: "Higher speed for quick turns in close fights.", v: { lh: 55, lv: 55, ah: 16, av: 16, curve: "Linear" } },
+        { name: "Beginner-friendly", style: "Exponential curve at a moderate speed: forgiving while you learn.", v: { lh: 45, lv: 45, ah: 12, av: 12, curve: "Exponential" } },
+      ],
+      trainer: v => ({ sensitivity: v.lh / 46, curve: v.curve === "Exponential" ? "exponential" : "linear" }),
+      shared: r => [
+        ["Right Stick Deadzone (%)", r.innerRight != null ? r.innerRight : "keep yours (run the drift test)"],
+        ["Left Stick Deadzone (%)", r.innerLeft != null ? r.innerLeft : "keep yours (run the drift test)"],
+        ["Look/ADS Horizontal & Vertical Turning Boost", "0%"],
+        ["Aim Assist Strength (%)", 100],
+      ],
+    },
+  };
+  const finder = { cod: [], fortnite: [] };     // trainer result per setup index
+  const fmtSetting = (g, k, v) => { const f = PRESETS[g].fields.find(x => x[0] === k); return f && f[2] != null && typeof v === "number" ? v.toFixed(f[2]) : String(v); };
+  const presetLine = (g, v) => PRESETS[g].fields.map(([k, label]) => `${label.replace(/ \(%\)$/, "")} ${fmtSetting(g, k, v[k])}${label.endsWith("(%)") ? "%" : ""}`).join(" · ");
+  function finderPick(g) {
+    const res = finder[g], P = PRESETS[g];
+    const tested = res.map((r, i) => r ? i : -1).filter(i => i >= 0);
+    if (!tested.length) return null;
+    const best = tested.reduce((a, b) => res[b].score > res[a].score ? b : a);
+    const run = res[best], op = run.overshoots / run.targets, t = run.avgTime;
+    let f = 1, why = `you were quick (${t.toFixed(2)} s per target) with few overshoots, so no change is needed`;
+    if (op > 1) { f = 0.9; why = `you overshot ${run.overshoots} times in ${run.targets} targets with it, so it's 10% slower`; }
+    else if (op > 0.5) { f = 0.95; why = `you overshot ${run.overshoots} times in ${run.targets} targets, so it's 5% slower`; }
+    else if (t > 1.4) { f = 1.1; why = `you were accurate but took ${t.toFixed(2)} s per target, so it's 10% faster`; }
+    else if (t > 1.1) { f = 1.05; why = `you were accurate but a little slow (${t.toFixed(2)} s per target), so it's 5% faster`; }
+    const v = { ...P.items[best].v };
+    for (const k of P.sens) { const dec = P.fields.find(x => x[0] === k)[2]; v[k] = +(v[k] * f).toFixed(dec); }
+    const runnerUp = tested.filter(i => i !== best).sort((a, b) => res[b].score - res[a].score)[0];
+    const close = runnerUp != null && res[best].score - res[runnerUp].score <= 5 ? runnerUp : null;
+    return { best, bestName: P.items[best].name, score: run.score, tested: tested.length, factor: f, why, tuned: v, close };
+  }
+  function presetText(g, title, v, why) {
+    const P = PRESETS[g], r = aimRec();
+    return [`${P.name} settings: ${title} (from ${TOOL.name}, ${new Date().toLocaleDateString()})`, `Where: ${P.where}`, "",
+      ...P.fields.map(([k, label]) => `${label}: ${fmtSetting(g, k, v[k])}`),
+      ...P.shared(r).map(([label, val]) => `${label}: ${val}`),
+      ...(why ? ["", `Why: ${why}`] : [])].join("\n");
+  }
+  function renderFinder() {
+    const g = $("gameSel").value, P = PRESETS[g], res = finder[g], pick = finderPick(g);
+    $("gameWhere").textContent = `Where to change them: ${P.where}`;
+    $("presetRows").innerHTML = P.items.map((p, i) => {
+      const r = res[i];
+      const isBest = pick && pick.best === i;
+      return `<tr><td><b>${i + 1}. ${esc(p.name)}</b>${isBest ? ` <span class="PASS">★ best for you</span>` : ""}<div class="detail">${esc(p.style)}</div></td>` +
+        `<td class="detail">${esc(presetLine(g, p.v))}</td>` +
+        `<td class="rec">${r ? `${r.score}/100` : "–"}${r ? `<div class="detail">${r.avgTime.toFixed(2)} s, ${r.overshoots} over</div>` : ""}</td>` +
+        `<td><div class="row" style="gap:6px"><button class="secondary" data-try="${i}">Try</button><button class="secondary" data-copy="${i}">Copy</button></div></td></tr>`;
+    }).join("");
+    const shared = P.shared(aimRec()).map(([l, v]) => `<li>${esc(l)}: <b>${esc(v)}</b></li>`).join("");
+    if (!pick) {
+      $("finderResult").innerHTML = `<b>Settings every setup shares (from your controller):</b><ul class="aimset">${shared}</ul>`;
+    } else {
+      const lines = P.fields.map(([k, label]) => {
+        const was = P.items[pick.best].v[k], now = pick.tuned[k];
+        return `<li>${esc(label)}: <b>${esc(fmtSetting(g, k, now))}</b>${now !== was ? ` <span class="detail">(setup value ${esc(fmtSetting(g, k, was))})</span>` : ""}</li>`;
+      }).join("");
+      $("finderResult").innerHTML =
+        `<div style="font-size:1.05rem"><b>Best for you: ${esc(pick.bestName)}</b> (${pick.score}/100${pick.tested < 5 ? `, ${pick.tested} of 5 setups tested` : ""})</div>` +
+        (pick.close != null ? `<p class="detail" style="margin:4px 0">${esc(P.items[pick.close].name)} scored almost as well, so try both in a real match.</p>` : "") +
+        `<p style="margin:8px 0 4px"><b>Fine-tuned for you:</b> ${esc(pick.why)}.</p><ul class="aimset">${lines}${shared}</ul>` +
+        `<div class="row" style="margin-top:8px"><button id="btnCopyBest">Copy these settings</button><span id="copyBestStatus" class="detail"></span></div>`;
+    }
+    $("finderResult").classList.remove("hidden");
+  }
+  async function testPreset(g, i) {
+    const p = PRESETS[g].items[i], tv = PRESETS[g].trainer(p.v);
+    const run = await runTrainer({ deadzone: aimRec().innerRight ?? 6, curve: tv.curve, sensitivity: +tv.sensitivity.toFixed(2) }, FINDER_TARGETS, `${i + 1}. ${p.name}`);
+    if (run) { finder[g][i] = run; $("trStatus").textContent = `${p.name}: ${runSummary(run)}`; renderFinder(); }
+    return run;
+  }
+  function setFinderBusy(b) { for (const el of [$("btnTestAll"), $("btnTrain"), ...document.querySelectorAll("#presetRows [data-try]")]) el.disabled = b; $("gameSel").disabled = b; }
+  $("btnTestAll").onclick = async () => {
+    if (!S.reports) { $("finderStatus").textContent = "Connect the controller first."; return; }
+    if (TR.running) return;
+    const g = $("gameSel").value;
+    setFinderBusy(true);
+    $("trCanvas").scrollIntoView({ block: "center", behavior: "smooth" });
+    for (let i = 0; i < PRESETS[g].items.length; i++) {
+      $("finderStatus").textContent = `Testing setup ${i + 1} of ${PRESETS[g].items.length}…`;
+      if (!(await testPreset(g, i))) break;
+    }
+    setFinderBusy(false);
+    const pick = finderPick(g);
+    $("finderStatus").textContent = pick ? `Done. Best for you: ${pick.bestName}.` : "";
+    recordHistory();
+  };
+  $("presetRows").addEventListener("click", async e => {
+    const g = $("gameSel").value, b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.copy != null) {
+      const p = PRESETS[g].items[+b.dataset.copy];
+      $("finderStatus").textContent = (await copyText(presetText(g, p.name, p.v, p.style))) ? `${p.name} copied.` : "Couldn't copy. Your browser blocked the clipboard.";
+    } else if (b.dataset.try != null) {
+      if (!S.reports) { $("finderStatus").textContent = "Connect the controller first."; return; }
+      if (TR.running) return;
+      setFinderBusy(true); $("trCanvas").scrollIntoView({ block: "center", behavior: "smooth" });
+      await testPreset(g, +b.dataset.try);
+      setFinderBusy(false); recordHistory();
+    }
+  });
+  $("finderResult").addEventListener("click", async e => {
+    if (e.target.id !== "btnCopyBest") return;
+    const g = $("gameSel").value, pick = finderPick(g);
+    $("copyBestStatus").textContent = (await copyText(presetText(g, `${pick.bestName}, fine-tuned`, pick.tuned, pick.why))) ? "Copied." : "Couldn't copy. Your browser blocked the clipboard.";
+  });
+  $("gameSel").onchange = renderFinder;
+  function finderReport() {
+    return Object.fromEntries(Object.keys(PRESETS).map(g => {
+      const pick = finderPick(g);
+      return [g, { results: PRESETS[g].items.map((p, i) => ({ setup: p.name, settings: p.v, score: finder[g][i] ? finder[g][i].score : null })),
+                   best: pick ? pick.bestName : null, fineTuned: pick ? pick.tuned : null, why: pick ? pick.why : null, shared: PRESETS[g].shared(aimRec()) }];
+    }));
+  }
+  renderAimSettings();
+  trDraw();
+
+  // =====================================================================
+  //  SHAREABLE REPORT
+  // =====================================================================
+  function buildReport() {
+    const sum = scoreSummary();
+    return {
+      tool: TOOL.name, toolVersion: TOOL.version, date: new Date().toISOString(),
+      controller: {
+        type: isDS5() ? "DualSense" : "DualShock 4", model: modelName, productName: device ? device.productName : "",
+        vendorId: device ? "0x" + device.vendorId.toString(16).padStart(4, "0") : "", productId: device ? "0x" + device.productId.toString(16).padStart(4, "0") : "",
+        connection: transport === "bt" ? "Bluetooth" : "USB", bluetoothAddress: btAddr.mac || null, pairedWith: btAddr.host || null,
+        board: info.board || null, firmware: info.firmware || null, keySerial: info.keySerial || null,
+      },
+      verdict: { title: $("vtitle").textContent, text: $("vtext").textContent.replace(/\s*\(\d+ failed.*\)$/, "").trim() },
+      score: sum,
+      deadzone: { left: dzPct.L, right: dzPct.R },
+      aim: { recommended: aimRec(), precision: { ...aimPrec }, trainerRuns: trainerRuns.slice(),
+             gameSettings: finderReport() },
+      checks: [...results.values()].map(r => ({ status: r.status, check: r.name, detail: r.detail })),
+      authEvidence: evidence,
+    };
+  }
+  function summaryText(r = buildReport()) {
+    const when = new Date(r.date).toLocaleString();
+    const lines = [
+      `${r.tool} report (${when})`,
+      `Controller: ${r.controller.model || r.controller.productName} over ${r.controller.connection}${r.controller.board ? `, board ${r.controller.board}` : ""}`,
+      `Verdict: ${r.verdict.title}`,
+      r.score.overall != null ? `Quality score: ${r.score.overall}/100 (${r.score.grade}), ${r.score.tested} of ${r.score.of} categories tested` : "Quality score: live tests not run",
+      r.deadzone.left != null ? `Stick drift: left needs ~${r.deadzone.left}% deadzone, right ~${r.deadzone.right}%` : null,
+      r.aim.recommended.innerRight != null ? `Recommended aim settings: right stick inner deadzone ${r.aim.recommended.innerRight}%` +
+        (r.aim.recommended.outer != null ? `, outer deadzone ${r.aim.recommended.outer}%` : "") : null,
+      r.aim.recommended.best ? `Aim trainer best: ${r.aim.recommended.best.score}/100 (${r.aim.trainerRuns.length} run${r.aim.trainerRuns.length === 1 ? "" : "s"})` : null,
+      ...Object.entries(r.aim.gameSettings).filter(([, s]) => s.best).map(([g, s]) => `Best ${PRESETS[g].name} setup: ${s.best} (fine-tuned)`),
+      "",
+      "Checks:",
+      ...r.checks.map(c => `  [${c.status}] ${c.check}${c.detail ? ` (${c.detail})` : ""}`),
+    ];
+    return lines.filter(l => l !== null).join("\n");
+  }
+  function fillPrintHead() {
+    const r = buildReport();
+    $("printMeta").innerHTML = `<div>${esc(new Date(r.date).toLocaleString())}</div>` +
+      `<div><b>${esc(r.controller.model || r.controller.productName)}</b> over ${r.controller.connection}${r.controller.board ? `, board ${esc(r.controller.board)}` : ""}${r.controller.bluetoothAddress ? `, address ${esc(r.controller.bluetoothAddress)}` : ""}</div>` +
+      (r.controller.firmware ? `<div class="detail">Firmware: ${esc(r.controller.firmware)}</div>` : "") +
+      (r.controller.keySerial ? `<div class="detail">Security chip key serial: ${esc(r.controller.keySerial)}</div>` : "") +
+      `<div class="detail">Made with ${TOOL.name} ${TOOL.version}</div>`;
+  }
+  window.addEventListener("beforeprint", fillPrintHead);
+  $("btnPdf").onclick = () => { fillPrintHead(); window.print(); };
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); return true; }
+    catch (_) {
+      const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select();
+      let ok = false; try { ok = document.execCommand("copy"); } catch (_) {}
+      ta.remove(); return ok;
+    }
+  }
+  $("btnCopy").onclick = async () => { $("shareStatus").textContent = (await copyText(summaryText())) ? "Summary copied." : "Couldn't copy. Your browser blocked the clipboard."; };
+  function download(name, text, type) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([text], { type }));
+    a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  const stamp = () => new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
+  $("btnJson").onclick = () => { download(`controller-report-${stamp()}.json`, JSON.stringify(buildReport(), null, 2), "application/json"); $("shareStatus").textContent = "Report downloaded."; };
+
+  // =====================================================================
+  //  CONTROLLER HISTORY (saved in this browser only)
+  // =====================================================================
+  const HKEY = "controllerChecker.history.v1";
+  const sessionId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  let storageOk = true;
+  function loadHist() { try { return JSON.parse(localStorage.getItem(HKEY) || "{}") || {}; } catch (_) { storageOk = false; return {}; } }
+  function saveHist(h) { try { localStorage.setItem(HKEY, JSON.stringify(h)); return true; } catch (_) { storageOk = false; return false; } }
+  function controllerId() {
+    if (btAddr.mac) return "mac:" + btAddr.mac;
+    if (info.keySerial) return "key:" + info.keySerial;
+    return null;
+  }
+  let histTimer = null;
+  function recordHistory() {
+    clearTimeout(histTimer);
+    histTimer = setTimeout(() => {
+      const id = controllerId();
+      if (id) {
+        const r = buildReport();
+        const h = loadHist();
+        const list = (h[id] ||= []);
+        const entry = { session: sessionId, date: r.date, model: r.controller.model, connection: r.controller.connection, verdict: r.verdict.title,
+                        score: r.score.overall, categories: r.score.categories, deadzone: r.deadzone, battery: batteryPct(), board: r.controller.board,
+                        aim: { trainerBest: r.aim.recommended.best ? r.aim.recommended.best.score : null, holdWobble: aimPrec.hold ? aimPrec.hold.wobble : null,
+                               smooth: aimPrec.circle ? aimPrec.circle.smooth : null } };
+        const i = list.findIndex(e => e.session === sessionId);
+        if (i >= 0) list[i] = entry; else list.push(entry);
+        if (list.length > 50) list.splice(0, list.length - 50);
+        saveHist(h);
+      }
+      renderHistory();
+    }, 200);
+  }
+  function renderHistory() {
+    const id = controllerId();
+    $("historyCard").classList.remove("hidden");
+    if (!storageOk) { $("historyBody").innerHTML = `<p class="detail">This browser isn't allowing saved data, so history is off.</p>`; return; }
+    if (!id) { $("historyBody").innerHTML = `<p class="detail">This controller couldn't be identified over this connection. Connect it over USB once to start keeping its history.</p>`; return; }
+    const all = (loadHist()[id] || []).slice().sort((a, b) => a.date < b.date ? 1 : -1);
+    const past = all.filter(e => e.session !== sessionId);
+    const cur = all.find(e => e.session === sessionId);
+    let html = `<p class="detail" style="margin-top:0">Saved in this browser only, under ${esc(id.replace(/^mac:/, "address ").replace(/^key:/, "chip key "))}.</p>`;
+    if (!past.length) {
+      html += `<p>First time testing this controller here. Test it again later to see whether drift, battery or the score change.</p>`;
+    } else {
+      const prev = past[0];
+      const diffs = [];
+      const fmtDelta = (now, then, unit, worseIfUp) => {
+        if (now == null || then == null) return null;
+        const d = now - then; if (!d) return `no change (${now}${unit})`;
+        const worse = worseIfUp ? d > 0 : d < 0;
+        return `<span class="${worse ? "up" : "down"}">${then}${unit} → ${now}${unit}</span>`;
+      };
+      if (cur) {
+        const sc = fmtDelta(cur.score, prev.score, "", false); if (sc) diffs.push(`Score: ${sc}`);
+        const dl = fmtDelta(cur.deadzone?.left, prev.deadzone?.left, "%", true); if (dl) diffs.push(`Left stick drift: ${dl}`);
+        const dr = fmtDelta(cur.deadzone?.right, prev.deadzone?.right, "%", true); if (dr) diffs.push(`Right stick drift: ${dr}`);
+        const at = fmtDelta(cur.aim?.trainerBest, prev.aim?.trainerBest, "", false); if (at) diffs.push(`Aim trainer best: ${at}`);
+      }
+      html += `<p>Last tested ${esc(new Date(prev.date).toLocaleDateString())}${diffs.length ? ": " + diffs.join(" · ") : "."}</p>`;
+      html += `<div class="tablewrap"><table><thead><tr><th>Date</th><th>Verdict</th><th>Score</th><th>Drift L / R</th><th>Aim best</th><th>Via</th></tr></thead><tbody>` +
+        all.slice(0, 10).map(e => `<tr><td>${esc(new Date(e.date).toLocaleString())}${e.session === sessionId ? " (now)" : ""}</td><td>${esc(e.verdict)}</td><td>${e.score ?? "–"}</td>` +
+          `<td>${e.deadzone?.left ?? "–"}% / ${e.deadzone?.right ?? "–"}%</td><td>${e.aim?.trainerBest ?? "–"}</td><td>${esc(e.connection || "")}</td></tr>`).join("") + `</tbody></table></div>`;
+    }
+    $("historyBody").innerHTML = html;
+  }
+  $("btnHistExport").onclick = () => { download(`controller-history-${stamp()}.json`, JSON.stringify(loadHist(), null, 2), "application/json"); $("histStatus").textContent = "History downloaded."; };
+  $("btnHistClear").onclick = () => {
+    const id = controllerId(); if (!id) return;
+    if (!confirm("Forget all saved results for this controller in this browser?")) return;
+    const h = loadHist(); delete h[id]; saveHist(h); $("histStatus").textContent = "Forgotten."; renderHistory();
+  };
+
+  // =====================================================================
+  //  MAIN
+  // =====================================================================
+  async function runAll() {
+    $("go").disabled = true;
+    $("results").innerHTML = ""; results.clear(); authResult = null; evidence = null;
+    Object.assign(info, { board: "", firmware: "", keySerial: "" });
+    ds5Flags = { fwlen: null, year: null, finetune: null };
+    for (const k in scores) delete scores[k];
+    renderScore();
+    $("verdict").style.display = "none";
+    try {
+      const devs = await navigator.hid.requestDevice({ filters: [{ vendorId: SONY_VID }] });
+      if (!devs.length) { $("go").disabled = false; return; }
+      if (device && device !== devs[0] && device.opened) { device.removeEventListener("inputreport", parseInput); await device.close(); }
+      device = devs[0];
+      const model = MODELS[device.productId];
+      devType = model ? model.type : "ds4";
+      modelName = model ? model.name : device.productName;
+      ds5LightsReleased = false;
+      resetLiveState();
+      renderButtonGrid();
+      if (!device.opened) await device.open();
+      device.removeEventListener("inputreport", parseInput);
+      device.addEventListener("inputreport", parseInput);
+      log(`Opened ${device.productName} VID ${device.vendorId.toString(16)} PID ${device.productId.toString(16)} as ${devType}`);
+      btAddr.mac = btAddr.host = "";
+      transport = await detectTransport();
+      $("conn").textContent = `Connected over ${transport === "bt" ? "Bluetooth" : "USB"}: ${device.productName}`;
+      log("Transport:", transport);
+      renderBtInfo();
+
+      if (device.productId === ADAPTER_PID) {
+        setVerdict("warn", "That's the Sony wireless adapter", "Plug the controller itself in with a USB cable and test that instead.");
+        $("go").disabled = false; return;
+      }
+      if (model) addResult("INFO", "Reports itself as " + model.name, `"${device.productName}". Clones copy this too, so it proves nothing by itself.`, "id");
+      else addResult("WARN", "Not a known PlayStation controller ID", `PID 0x${device.productId.toString(16)} ("${device.productName}"). Testing it as a DualShock 4.`, "id");
+
+      $("live").classList.remove("hidden");
+      if (!rafOn) { rafOn = true; requestAnimationFrame(frame); }
+
+      const streamCheck = checkInputStream();   // passive, runs alongside the other checks
+      if (isDS5()) {
+        addResult("INFO", "No security chip test for DualSense", "There's no public, verified way to run the PS5 handshake. Using DualShock Tools' DualSense clone checks instead.", "auth");
+        await checkFirmwareDS5();
+        await checkFinetuneDS5();
+        await checkCalibration();
+        await checkMac();
+        authResult = transport === "bt" ? "bt"
+          : (ds5Flags.fwlen && ds5Flags.year && ds5Flags.finetune) ? "ds5-ok" : "ds5-clone";
+      } else {
+        authResult = await checkAuthDS4();
+        await checkFirmwareDS4();
+        await checkProbe81();
+        await checkCalibration();
+        await checkMac();
+      }
+      await streamCheck;
+      updateVerdict();
+    } catch (e) {
+      log("Error:", e.stack || e);
+      setVerdict("warn", "Couldn't talk to the controller", `${esc(e.message)}<br>Quit Steam and DS4Windows, replug the USB cable, and try again.`);
+    }
+    $("go").disabled = false;
+  }
+
+  if (!("hid" in navigator)) { $("nohid").classList.remove("hidden"); $("go").disabled = true; }
+  $("go").addEventListener("click", runAll);
+
+  // Hooks for the automated test page (tests/run.html)
+  window.__checker = { buildReport, summaryText, historyKey: HKEY, version: TOOL.version, aimRec, finderPick, presetText,
+                       presets: PRESETS,
+                       setFinderResultsForTest: (g, runs) => { finder[g] = runs.slice(); renderFinder(); },
+                       trainer: () => ({ running: TR.running, x: TR.x, y: TR.y, target: TR.target, n: TR.n, set: TR.set }) };
+})();
+</script>
+</body>
+</html>

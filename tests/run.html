@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Checker Test Runner</title>
+<style>
+  :root { --bg: #f5f6f8; --card: #fff; --text: #1b1f24; --muted: #5d6673; --border: #dde1e6; --ok: #1f8a4c; --bad: #c62f2f; --accent: #2f6fde; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #14171b; --card: #1d2127; --text: #e6e9ed; --muted: #9aa3ae; --border: #2e343c; --ok: #3cbf74; --bad: #ef5d5d; --accent: #5b8ff0; } }
+  :root[data-theme="dark"] { --bg: #14171b; --card: #1d2127; --text: #e6e9ed; --muted: #9aa3ae; --border: #2e343c; --ok: #3cbf74; --bad: #ef5d5d; --accent: #5b8ff0; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 20px 16px; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+  #summary { font-size: 1.2rem; font-weight: 700; }
+  .pass { color: var(--ok); } .fail { color: var(--bad); }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 5px 6px; border-top: 1px solid var(--border); vertical-align: top; }
+  td:first-child { width: 48px; font-weight: 700; }
+  .scn td { font-weight: 700; background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  .muted { color: var(--muted); }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 0; background: var(--accent); color: #fff; font-weight: 600; cursor: pointer; }
+  iframe { width: 100%; height: 420px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Controller Checker: automated tests</h1>
+  <p class="muted">Runs the real checker page against simulated controllers (genuine and fake DualShock 4 and DualSense, over USB and Bluetooth) and checks every verdict, live test, report and history entry. Takes about two minutes. Keep this tab visible: background tabs run slower.</p>
+  <div class="card"><div class="row"><span id="summary">Starting…</span> <button id="again" hidden>Run again</button></div></div>
+  <div class="card"><table><tbody id="out"></tbody></table></div>
+  <iframe id="app" title="Checker under test"></iframe>
+</main>
+<script type="module">
+const out = document.getElementById("out"), frame = document.getElementById("app");
+let W, D, M, passed = 0, failed = 0;
+const failures = [];
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const HKEY = "controllerChecker.history.v1";
+
+function row(cls, a, b) { const tr = document.createElement("tr"); tr.className = cls; tr.innerHTML = `<td>${a}</td><td>${b}</td>`; out.appendChild(tr); tr.scrollIntoView({ block: "nearest" }); }
+function scenario(name) { row("scn", "", name); }
+function expect(cond, label, info = "") {
+  if (cond) { passed++; row("", `<span class="pass">PASS</span>`, label); }
+  else { failed++; failures.push(label); row("", `<span class="fail">FAIL</span>`, `${label}<div class="muted">${info}</div>`); }
+}
+const esc = s => String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+const check = key => {
+  const tr = D.querySelector(`tr[data-key="${key}"]`);
+  if (tr) return { status: tr.cells[0].textContent, text: tr.cells[1].textContent };
+  const st = ["driftStatus", "rangeStatus", "aimStatus", "conn"].map(id => `${id}="${D.getElementById(id)?.textContent || ""}"`).join(" ");
+  return { status: "missing", text: `(no result row; ${st}; reports=${W.mockDev ? W.mockDev.counter : "?"}; last log: ${D.getElementById("log").textContent.slice(-160)})` };
+};
+function expectCheck(key, status, label) { const c = check(key); expect(c.status === status, `${label}: ${status}`, `got ${c.status}: ${esc(c.text)}`); }
+const verdict = () => D.getElementById("vtitle").textContent;
+const click = id => D.getElementById(id).click();
+
+async function loadApp() {
+  frame.src = "../index.html?t=" + Date.now();
+  await new Promise(r => { frame.onload = r; });
+  W = frame.contentWindow; D = W.document;
+  const url = new URL("tests/mock-controller.js", W.location.href).href;   // load the mock inside the checker's own window
+  M = await W.eval(`import(${JSON.stringify(url)})`);
+}
+async function connect(opts) {
+  const dev = M.install(opts, W);
+  click("go");
+  const t0 = Date.now(); await sleep(500);
+  while (Date.now() - t0 < 25000) {
+    await sleep(200);
+    if (!D.getElementById("go").disabled && D.getElementById("verdict").style.display === "block") break;
+  }
+  return dev;
+}
+
+// ---------- simulated hands ----------
+async function drift(dev, L, R) {
+  const s = dev.state;
+  const t = setInterval(() => { s.lx = L[0]; s.ly = L[1]; s.rx = R[0] + (Math.random() < .5 ? 0 : 1); s.ry = R[1]; }, 5);
+  click("btnDrift"); await sleep(3700); clearInterval(t);
+}
+async function range(dev, squareRight) {
+  const s = dev.state; let a = 0;
+  const t = setInterval(() => {
+    a += 0.05; const c = Math.cos(a), sn = Math.sin(a);
+    s.lx = Math.round(127.5 + 127.5 * c); s.ly = Math.round(127.5 + 127.5 * sn);
+    const k = squareRight ? 1 / Math.max(Math.abs(c), Math.abs(sn)) : 1;
+    s.rx = Math.max(0, Math.min(255, Math.round(127.5 + 127.5 * c * k))); s.ry = Math.max(0, Math.min(255, Math.round(127.5 + 127.5 * sn * k)));
+  }, 5);
+  click("btnRange"); await sleep(8700); clearInterval(t); s.lx = s.ly = s.rx = s.ry = 128;
+}
+async function triggers(dev, { digital = false, r2Rest = 0, slow = false } = {}) {
+  const s = dev.state;
+  // "slow" squeezes over ~3 s, like a person would, for controllers that only update ~30 times a second
+  if (digital) { for (let i = 0; i < 6; i++) { s.l2 = s.r2 = i % 2 ? 255 : 0; await sleep(60); } }
+  else { for (let v = 0; v <= 255; v += slow ? 3 : 4) { s.l2 = s.r2 = v; await sleep(slow ? 36 : 6); } s.l2 = s.r2 = 255; await sleep(slow ? 100 : 30); }
+  s.l2 = 0; s.r2 = r2Rest; await sleep(slow ? 150 : 60);
+  click("btnTrigDone");
+}
+async function pressButtons(dev, skip = []) {
+  const s = dev.state;
+  const all = [["Up", "dpad", 0], ["Right", "dpad", 2], ["Down", "dpad", 4], ["Left", "dpad", 6], ["Square", "b4hi", 0x10], ["Cross", "b4hi", 0x20], ["Circle", "b4hi", 0x40], ["Triangle", "b4hi", 0x80],
+    ["L1", "b5", 0x01], ["R1", "b5", 0x02], ["Share", "b5", 0x10], ["Options", "b5", 0x20], ["L3", "b5", 0x40], ["R3", "b5", 0x80], ["PS", "b6", 1], ["Touchpad click", "b6", 2], ["Mute", "b6", 4]];
+  for (const [name, k, v] of all) {
+    if (skip.includes(name) || (name === "Mute" && dev.type !== "ds5")) continue;
+    s[k] = v; await sleep(35); s[k] = k === "dpad" ? 8 : 0; await sleep(35);
+  }
+  click("btnBtnsDone");
+}
+async function motion(dev) {
+  const s = dev.state; let t = 0;
+  click("btnMotion");
+  const iv = setInterval(() => { t += .1; s.gyro = [Math.round(6000 * Math.sin(t)), Math.round(4000 * Math.cos(t)), 0]; s.acc = [Math.round(3000 * Math.sin(t)), 8192, Math.round(2500 * Math.cos(t))]; s.touch = t > 3 && t < 6; }, 10);
+  await sleep(8800); clearInterval(iv); s.touch = false; s.gyro = [0, 0, 0]; s.acc = [0, 8192, 0];
+}
+async function lights(dev) { click("btnLights"); return M.autoAnswerLights(dev, 30000, D); }
+
+// ---------- scenarios ----------
+async function run() {
+  passed = failed = 0; failures.length = 0; out.innerHTML = "";
+  document.getElementById("again").hidden = true;
+  // Background tabs get their timers slowed, which starves the simulated controller; wait until this tab is shown
+  if (document.hidden) {
+    document.getElementById("summary").textContent = "Waiting for this tab to be visible…";
+    await new Promise(res => { const f = () => { if (!document.hidden) { document.removeEventListener("visibilitychange", f); res(); } }; document.addEventListener("visibilitychange", f); setTimeout(res, 20000); });
+    await sleep(500);
+    wasHidden = document.hidden;
+  }
+  document.getElementById("summary").textContent = "Running…";
+  const t0 = Date.now();
+  try { localStorage.removeItem(HKEY); localStorage.removeItem("controllerChecker.gameSettings.v1"); } catch (_) {}
+
+  scenario("1. Genuine DualShock 4 (2nd gen) over USB, with every live test");
+  await loadApp();
+  let dev = await connect({ type: "ds4", kind: "genuine", transport: "usb", gen: 2 });
+  expect(verdict().startsWith("Genuine"), "Verdict is Genuine", verdict());
+  for (const [k, s, l] of [["auth", "PASS", "Security chip signature"], ["r81", "PASS", "0x81 probe"], ["fwlen", "PASS", "Firmware report size"], ["board", "PASS", "Board model"],
+    ["cal", "PASS", "Factory calibration"], ["rate", "PASS", "250 Hz report rate"], ["ts", "PASS", "Timestamp ticking"], ["len", "PASS", "Report layout"], ["mac", "INFO", "Bluetooth address"], ["genmatch", "PASS", "Board matches the 2nd-gen ID"]]) expectCheck(k, s, l);
+  await drift(dev, [128, 127], [150, 140]);
+  expectCheck("dzL", "PASS", "Left stick drift (none)"); expectCheck("dzR", "FAIL", "Right stick drift (simulated 18%)");
+  await range(dev, true);
+  expectCheck("rgL", "PASS", "Left stick round"); expectCheck("rgR", "WARN", "Right stick square output");
+  await triggers(dev, { r2Rest: 30 });
+  expectCheck("l2", "PASS", "L2 analog"); expectCheck("r2rest", "WARN", "R2 stuck at 30");
+  await pressButtons(dev, ["PS"]);
+  const b = check("btns"); expect(b.status === "WARN" && b.text.includes("PS"), "Missing PS button detected", b.text);
+  await motion(dev);
+  expectCheck("gyro", "PASS", "Gyro"); expectCheck("acc", "PASS", "Accelerometer"); expectCheck("touch", "PASS", "Touchpad");
+  expect(await lights(dev), "Lightbar quiz completes");
+  expectCheck("lightc", "PASS", "Lightbar colours"); expectCheck("rumL", "PASS", "Left motor"); expectCheck("rumR", "PASS", "Right motor");
+  expect(dev.errors.length === 0, "Controller saw only valid commands", dev.errors.join("; "));
+  const rep = W.__checker.buildReport();
+  // After the simulated faults (drift, stuck R2, missing PS) the verdict correctly drops to "verified, with odd results"
+  expect(rep.controller.type === "DualShock 4" && rep.verdict.title === "Security chip verified, with odd results", "JSON report: controller and verdict", rep.verdict.title);
+  expect(rep.authEvidence && rep.authEvidence.signature.length === 512 && rep.authEvidence.nonce.length === 512, "JSON report: signed-challenge evidence included");
+  expect(rep.score.overall != null && rep.score.tested >= 5, "JSON report: quality score", JSON.stringify(rep.score));
+  expect(rep.deadzone.right >= 15, "JSON report: deadzone recorded", JSON.stringify(rep.deadzone));
+  const txt = W.__checker.summaryText();
+  expect(txt.includes("Verdict: Security chip verified") && txt.includes("[FAIL] Right stick") && txt.includes("Quality score:"), "Text summary content", esc(txt.slice(0, 300)));
+  expect(!D.getElementById("shareCard").classList.contains("hidden"), "Share card shown");
+  await sleep(400);
+  let hist = JSON.parse(localStorage.getItem(HKEY) || "{}");
+  const histList = hist["mac:00:1F:E2:12:34:56"] || [];
+  expect(histList.length === 1 && histList[0].deadzone.right >= 15, "History saved for this controller", JSON.stringify(hist).slice(0, 200));
+  expect(D.getElementById("historyBody").textContent.includes("First time"), "History says first test");
+  await dev.close();
+
+  scenario("2. Same controller tested again (history comparison)");
+  await loadApp();
+  dev = await connect({ type: "ds4", kind: "genuine", transport: "usb", gen: 2 });
+  await drift(dev, [128, 127], [128, 128]);
+  await sleep(400);
+  const hb = D.getElementById("historyBody").textContent;
+  expect(hb.includes("Last tested") && hb.includes("Right stick drift"), "History compares with the last test", esc(hb.slice(0, 200)));
+  hist = JSON.parse(localStorage.getItem(HKEY) || "{}");
+  expect((hist["mac:00:1F:E2:12:34:56"] || []).length === 2, "Second session saved separately");
+  await dev.close();
+
+  scenario("3. Genuine DualShock 4 (1st gen, no 0xF3 report) over USB");
+  await loadApp();
+  dev = await connect({ type: "ds4", kind: "genuine", transport: "usb", gen: 1 });
+  expect(verdict().startsWith("Genuine"), "Verdict is Genuine", verdict());
+  expectCheck("auth", "PASS", "Security chip signature without 0xF3");
+  expectCheck("genmatch", "PASS", "1st-gen board matches the 1st-gen ID");
+  await dev.close();
+
+  scenario("4. Fake DualShock 4 over USB");
+  await loadApp();
+  dev = await connect({ type: "ds4", kind: "clone", transport: "usb" });
+  expect(verdict() === "Likely counterfeit", "Verdict is Likely counterfeit", verdict());
+  for (const [k, s, l] of [["auth", "FAIL", "No security chip"], ["r81", "FAIL", "Ignores 0x81"], ["fw", "FAIL", "No firmware report"], ["cal", "FAIL", "Blank calibration"],
+    ["ts", "FAIL", "Frozen timestamp"], ["rate", "WARN", "125 Hz"], ["mac", "WARN", "Made-up Bluetooth address"]]) expectCheck(k, s, l);
+  await triggers(dev, { digital: true });
+  expectCheck("l2", "FAIL", "Digital L2 trigger");
+  expect(await lights(dev), "Lightbar quiz completes");
+  expectCheck("lightc", "FAIL", "Swapped lightbar colours");
+  await dev.close();
+
+  scenario("5. Genuine DualShock 4 over Bluetooth");
+  await loadApp();
+  dev = await connect({ type: "ds4", kind: "genuine", transport: "bt" });
+  expect(verdict().includes("Bluetooth"), "Verdict says Bluetooth", verdict());
+  expectCheck("auth", "INFO", "Security chip skipped over Bluetooth");
+  expectCheck("cal", "PASS", "Bluetooth calibration layout");
+  await pressButtons(dev);
+  expectCheck("btns", "PASS", "All 16 buttons over Bluetooth");
+  expect(await lights(dev), "Lightbar quiz completes");
+  expectCheck("lightc", "PASS", "Lightbar colours over Bluetooth (CRC'd report)");
+  expect(dev.errors.length === 0, "Controller saw only valid Bluetooth commands", dev.errors.join("; "));
+  await dev.close();
+
+  scenario("6. Genuine DualSense over USB");
+  await loadApp();
+  dev = await connect({ type: "ds5", kind: "genuine", transport: "usb" });
+  expect(verdict().startsWith("Likely genuine"), "Verdict is Likely genuine", verdict());
+  for (const [k, s, l] of [["auth", "INFO", "No PS5 handshake (explained)"], ["fwlen", "PASS", "64-byte firmware report"], ["finetune", "PASS", "Calibration query answered"],
+    ["board", "PASS", "BDM board model"], ["cal", "PASS", "Factory calibration"], ["mac", "INFO", "Bluetooth address"], ["rate", "PASS", "Report rate"], ["ts", "PASS", "Timestamp ticking"], ["len", "PASS", "Report layout"]]) expectCheck(k, s, l);
+  expect(check("board").text.includes("BDM-040"), "Board is BDM-040", check("board").text);
+  const grid = D.getElementById("btngrid").textContent;
+  expect(grid.includes("Create") && grid.includes("Mute") && !grid.includes("Share"), "Button grid uses DualSense names", grid);
+  await pressButtons(dev);
+  expectCheck("btns", "PASS", "All 17 DualSense buttons");
+  await drift(dev, [128, 127], [129, 128]);
+  expectCheck("dzR", "PASS", "DualSense stick drift");
+  await triggers(dev);
+  expectCheck("r2", "PASS", "DualSense analog R2");
+  await motion(dev);
+  expectCheck("gyro", "PASS", "DualSense gyro"); expectCheck("touch", "PASS", "DualSense touchpad");
+  expect(await lights(dev), "Lightbar quiz completes");
+  expectCheck("lightc", "PASS", "DualSense lightbar colours"); expectCheck("rumL", "PASS", "DualSense left motor"); expectCheck("rumR", "PASS", "DualSense right motor");
+  expect(dev.errors.length === 0, "Controller saw only valid DualSense commands", dev.errors.join("; "));
+  expect(dev.featureWrites.every(([id, d]) => id === 0x80 && d[0] === 12 && d[1] === 2), "Only the read-only calibration query was written", JSON.stringify(dev.featureWrites));
+  expect(W.__checker.buildReport().controller.type === "DualSense", "JSON report says DualSense");
+  await dev.close();
+
+  scenario("7. Fake DualSense over USB");
+  await loadApp();
+  dev = await connect({ type: "ds5", kind: "clone", transport: "usb" });
+  expect(verdict() === "Likely counterfeit", "Verdict is Likely counterfeit", verdict());
+  expectCheck("fwyear", "FAIL", "Firmware date in the future");
+  expectCheck("finetune", "FAIL", "Calibration query not answered");
+  expectCheck("ts", "FAIL", "Frozen timestamp");
+  await dev.close();
+
+  scenario("8. Genuine DualSense over Bluetooth");
+  await loadApp();
+  dev = await connect({ type: "ds5", kind: "genuine", transport: "bt" });
+  expect(verdict().includes("Bluetooth"), "Verdict says Bluetooth", verdict());
+  expectCheck("len", "PASS", "Bluetooth report layout");
+  await pressButtons(dev);
+  expectCheck("btns", "PASS", "All buttons over Bluetooth");
+  expect(await lights(dev), "Lightbar quiz completes");
+  expectCheck("lightc", "PASS", "Lightbar over Bluetooth (CRC'd report)");
+  expect(dev.errors.length === 0, "Controller saw only valid Bluetooth commands", dev.errors.join("; "));
+  await dev.close();
+
+  scenario("9. Aim tools: precision test, recommended settings and trainer");
+  await loadApp();
+  dev = await connect({ type: "ds4", kind: "genuine", transport: "usb", gen: 2 });
+  expect(D.getElementById("aimSettings").textContent.includes("run the drift test"), "Settings ask for the drift test first");
+  await drift(dev, [128, 127], [131, 128]);
+  const rec = W.__checker.aimRec();
+  expect(rec.innerRight === check("dzR").text.match(/~(\d+)%/).map(Number)[1] + 2, "Recommended deadzone = measured drift + 2%", JSON.stringify(rec));
+  expect(D.getElementById("aimSettings").textContent.includes(`inner deadzone: ${rec.innerRight}%`), "Recommended deadzone shown");
+  await range(dev, false);
+  expect(W.__checker.aimRec().outer === 0, "Full-range stick gets 0% outer deadzone");
+  let s9 = dev.state, iv;
+  iv = setInterval(() => { s9.rx = 160 + (Math.random() < .5 ? 0 : 1); s9.ry = 128; }, 5);
+  click("btnAimHold"); await sleep(3700); clearInterval(iv);
+  expectCheck("aimHold", "PASS", "Steady hold");
+  iv = setInterval(() => { s9.rx = 160 + Math.round((Math.random() - .5) * 16); s9.ry = 128 + Math.round((Math.random() - .5) * 16); }, 5);
+  click("btnAimHold"); await sleep(3700); clearInterval(iv);
+  expectCheck("aimHold", "FAIL", "Shaky hold detected");
+  let ang = 0;
+  iv = setInterval(() => { ang += 0.004; s9.rx = Math.round(127.5 + 45 * Math.cos(ang)); s9.ry = Math.round(127.5 + 45 * Math.sin(ang)); }, 4);
+  click("btnAimCircle"); await sleep(8700); clearInterval(iv);
+  expectCheck("aimCircle", "PASS", "Smooth slow circle");
+  iv = setInterval(() => { ang += 0.004; s9.rx = 8 * Math.round((127.5 + 45 * Math.cos(ang)) / 8); s9.ry = 8 * Math.round((127.5 + 45 * Math.sin(ang)) / 8); }, 4);
+  click("btnAimCircle"); await sleep(8700); clearInterval(iv);
+  expectCheck("aimCircle", "FAIL", "Worn, jumpy stick detected");
+  expect(W.__checker.aimRec().jumpy, "Jumpy stick flagged in recommendations");
+  s9.rx = s9.ry = 128;
+  click("btnTrDz");
+  expect(+D.getElementById("trDz").value === W.__checker.aimRec().innerRight, "Trainer uses the recommended deadzone");
+  click("btnTrain");
+  // a simple scripted "player" that pushes the right stick toward each target and lets go when it's on it
+  const bot = setInterval(() => {
+    const t = W.__checker.trainer();
+    if (!t.running || !t.target) { s9.rx = s9.ry = 128; return; }
+    const dx = t.target.x - t.x, dy = t.target.y - t.y, dist = Math.hypot(dx, dy);
+    if (dist < 8) { s9.rx = s9.ry = 128; return; }
+    const m = Math.min(1, 0.2 + dist / 250);
+    s9.rx = Math.round(127.5 + 127 * m * dx / dist); s9.ry = Math.round(127.5 + 127 * m * dy / dist);
+  }, 8);
+  const tStart = Date.now(); await sleep(3000);
+  while (W.__checker.trainer().running && Date.now() - tStart < 70000) await sleep(250);
+  clearInterval(bot); s9.rx = s9.ry = 128;
+  const tr = W.__checker.trainer();
+  expect(!tr.running && tr.n === 10, "Trainer completes 10 targets", JSON.stringify(tr));
+  expect(D.getElementById("trStatus").textContent.startsWith("Score"), "Trainer shows a score", D.getElementById("trStatus").textContent);
+  const rep9 = W.__checker.buildReport();
+  expect(rep9.aim.trainerRuns.length === 1 && rep9.aim.trainerRuns[0].score > 0, "Trainer run in the JSON report", JSON.stringify(rep9.aim.trainerRuns));
+  expect(rep9.aim.recommended.best !== null, "Best trainer run recorded in recommendations", JSON.stringify(rep9.aim.recommended));
+  expect(W.__checker.summaryText().includes("Aim trainer best:"), "Text summary includes the trainer");
+  await sleep(400);
+  const h9 = JSON.parse(localStorage.getItem(HKEY) || "{}")["mac:00:1F:E2:12:34:56"] || [];
+  expect(h9.length && h9[h9.length - 1].aim && h9[h9.length - 1].aim.trainerBest != null, "Trainer best saved to history", JSON.stringify(h9[h9.length - 1] || {}).slice(0, 200));
+  await dev.close();
+
+  scenario("10. Best settings finder: 5 setups per game, tested in the trainer");
+  await loadApp();
+  dev = await connect({ type: "ds4", kind: "genuine", transport: "usb", gen: 2 });
+  const C = W.__checker;
+  const rows = () => [...D.querySelectorAll("#presetRows tr")];
+  expect(rows().length === 5 && D.getElementById("presetRows").textContent.includes("Balanced"), "5 Call of Duty setups shown before any training");
+  expect(D.getElementById("finderResult").textContent.includes("keep yours"), "Shared deadzones ask for the stick tests first");
+  await drift(dev, [128, 127], [131, 128]);
+  await triggers(dev, { r2Rest: 30 });
+  const inner = C.aimRec().innerRight, fr = D.getElementById("finderResult").textContent;
+  expect(fr.includes(`Right Stick Min Input Deadzone: ${inner}`) && fr.includes("L2 / R2 Button Deadzone: 14"), "Measured deadzones filled into every setup", esc(fr.slice(0, 250)));
+  const sel = D.getElementById("gameSel"); sel.value = "fortnite"; sel.dispatchEvent(new W.Event("change"));
+  expect(rows().length === 5 && D.getElementById("presetRows").textContent.includes("Exponential aimer"), "5 Fortnite setups shown");
+  expect(D.getElementById("finderResult").textContent.includes("Aim Assist Strength (%): 100"), "Fortnite shared settings include aim assist strength 100");
+  // known results: Controlled (CoD #2) best but overshooting → 10% slower
+  const mk = (score, avgTime, overshoots) => ({ score, avgTime, overshoots, misses: 0, targets: 6, deadzone: 6, curve: "standard", sensitivity: 1 });
+  C.setFinderResultsForTest("cod", [mk(55, 1.0, 2), mk(80, 0.9, 9), mk(60, 1.0, 3), mk(40, 1.2, 8), mk(70, 1.3, 1)]);
+  let pick = C.finderPick("cod");
+  expect(pick.bestName === "Controlled" && pick.factor === 0.9 && pick.tuned.hs === 4.5 && pick.tuned.vs === 4.5, "CoD: best setup picked and slowed 10% for overshooting (5 → 4.5)", JSON.stringify(pick));
+  expect(pick.tuned.curve === "Standard" && pick.tuned.aa === "Focusing", "CoD: fine-tuned version keeps the setup's curve and aim assist");
+  expect(C.presetText("cod", "Controlled, fine-tuned", pick.tuned, pick.why).includes("Horizontal Stick Sensitivity: 4.50"), "CoD copy text has the tuned value");
+  // Fortnite: Exponential aimer best, accurate but slow → 10% faster; Fast & aggressive within 5 points
+  C.setFinderResultsForTest("fortnite", [mk(50, 1.5, 1), mk(75, 1.6, 1), mk(45, 1.8, 0), mk(72, 1.0, 4), null]);
+  pick = C.finderPick("fortnite");
+  expect(pick.bestName === "Exponential aimer" && pick.tuned.lh === 59 && pick.tuned.ah === 17 && pick.tuned.curve === "Exponential", "Fortnite: best setup sped up 10% (54 → 59, ADS 15 → 17)", JSON.stringify(pick));
+  expect(pick.close === 3 && pick.tested === 4, "Fortnite: close runner-up flagged; untested setup ignored", JSON.stringify(pick));
+  const frF = D.getElementById("finderResult").textContent;
+  expect(frF.includes("Best for you: Exponential aimer") && frF.includes("Fast & aggressive scored almost as well"), "Best pick and runner-up shown", esc(frF.slice(0, 200)));
+  expect(D.getElementById("presetRows").textContent.includes("★ best for you"), "Best setup marked in the table");
+  // real run: play all 5 CoD setups with the scripted player
+  sel.value = "cod"; sel.dispatchEvent(new W.Event("change"));
+  C.setFinderResultsForTest("cod", []);
+  const s10 = dev.state;
+  const bot10 = setInterval(() => {
+    const t = C.trainer();
+    if (!t.running || !t.target) { s10.rx = s10.ry = 128; return; }
+    const dx = t.target.x - t.x, dy = t.target.y - t.y, dist = Math.hypot(dx, dy);
+    if (dist < 8) { s10.rx = s10.ry = 128; return; }
+    const m = Math.min(1, 0.35 + dist / 250);
+    s10.rx = Math.round(127.5 + 127 * m * dx / dist); s10.ry = Math.round(127.5 + 127 * m * dy / dist);
+  }, 8);
+  click("btnTestAll");
+  const t10 = Date.now(); await sleep(2000);
+  while (!D.getElementById("finderStatus").textContent.startsWith("Done") && Date.now() - t10 < 120000) await sleep(500);
+  clearInterval(bot10); s10.rx = s10.ry = 128;
+  const scores = rows().map(r => r.cells[2].textContent);
+  expect(scores.every(s => /\d+\/100/.test(s)), "All 5 setups played and scored", scores.join(" | "));
+  pick = C.finderPick("cod");
+  const rep10 = C.buildReport().aim.gameSettings.cod;
+  expect(pick && pick.tested === 5 && rep10.best === pick.bestName && rep10.results.every(r => r.score != null), "Best setup chosen and in the JSON report", JSON.stringify(rep10).slice(0, 300));
+  expect(Math.max(...rep10.results.map(r => r.score)) === rep10.results.find(r => r.setup === pick.bestName).score, "The chosen setup has the top score");
+  expect(C.summaryText().includes(`Best Call of Duty setup: ${pick.bestName}`), "Text summary names the best setup");
+  await dev.close();
+
+  scenario("11. Gioteck VX4 over Bluetooth (third-party PS4 controller, as measured on a real one)");
+  await loadApp();
+  dev = await connect({ type: "ds4", kind: "gioteck", transport: "bt" });
+  expect(verdict() === "Not a genuine Sony controller", "Verdict: not a genuine Sony controller, even over Bluetooth", verdict());
+  expect(D.getElementById("vtext").textContent.includes("Gioteck"), "Verdict explains third-party controllers");
+  expectCheck("genmatch", "FAIL", "2nd-gen ID on a 1st-gen board");
+  expect(check("cal").status === "FAIL" && check("cal").text.includes("generic"), "Generic (not factory-measured) calibration", check("cal").text);
+  expectCheck("rate", "WARN", "~32 Hz Bluetooth updates flagged as laggy");
+  await pressButtons(dev);
+  expectCheck("btns", "PASS", "All buttons work");
+  await triggers(dev, { slow: true });
+  expectCheck("l2", "PASS", "Analog triggers");
+  expect(await lights(dev), "Lightbar quiz completes");
+  expectCheck("lightc", "INFO", "No lightbar treated as normal, not a fault");
+  expectCheck("rumL", "PASS", "Left motor"); expectCheck("rumR", "PASS", "Right motor");
+  const sc11 = W.__checker.buildReport().score;
+  expect(sc11.categories.lights === 100, "Missing lightbar doesn't lower the score (rumble only)", JSON.stringify(sc11.categories));
+  expect(dev.errors.length === 0, "Controller saw only valid Bluetooth commands", dev.errors.join("; "));
+  await dev.close();
+
+  const secs = Math.round((Date.now() - t0) / 1000);
+  const s = document.getElementById("summary");
+  s.className = failed ? "fail" : "pass";
+  s.textContent = `${passed} passed, ${failed} failed (${secs}s)` +
+    (wasHidden && failed ? ". This tab was in the background during the run, which slows its timers; re-run with it visible before trusting the failures." : "");
+  document.title = failed ? `FAIL: ${failed} test(s)` : `PASS: ${passed} tests`;
+  window.__testResults = { passed, failed, failures, seconds: secs, done: true, ranInBackground: wasHidden };
+  document.getElementById("again").hidden = false;
+  try { localStorage.removeItem(HKEY); } catch (_) {}
+}
+
+let wasHidden = document.hidden;
+document.addEventListener("visibilitychange", () => { if (document.hidden) wasHidden = true; });
+document.getElementById("again").onclick = () => { wasHidden = document.hidden; run(); };
+window.__testResults = { done: false };
+run().catch(e => {
+  failed++; row("", `<span class="fail">ERROR</span>`, esc(e.stack || e));
+  document.getElementById("summary").textContent = "Test run crashed: " + e.message;
+  window.__testResults = { passed, failed, failures: [...failures, String(e)], done: true };
+});
+</script>
+</body>
+</html>
