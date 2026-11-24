@@ -4,6 +4,10 @@ A single-page browser tool that tests a PlayStation controller (DualShock 4 or D
 
 It checks stick drift and range, every button, analog triggers, gyro and touchpad, lightbar and rumble, battery and Bluetooth signal, and (for the DualShock 4) runs Sony's security-chip handshake. It also has an aim trainer and recommended settings for Call of Duty and Fortnite.
 
+**Use it online (no install): https://libyan11.github.io/playstation-controller-checker/**
+
+Use Chrome or Edge on a computer. Everything runs in your browser; nothing is uploaded.
+
 ## Run
 
 Double-click `start.bat`. It serves the folder at http://127.0.0.1:8790 and opens it in Chrome (WebHID needs a secure origin like localhost). Requires Python (`py`) and Chrome. Close the window to stop the server.
